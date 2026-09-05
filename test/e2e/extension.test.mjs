@@ -48,8 +48,17 @@ test.before(async () => {
   site = await startSite();
   profile = mkdtempSync(join(tmpdir(), 'aura-e2e-'));
 
+  /*
+   * Playwright's default headless browser is the "headless shell", which cannot
+   * load extensions — the service worker never registers and the extension id
+   * is null. `channel: 'chromium'` selects the full build, which can.
+   * CHROMIUM_PATH overrides for environments shipping their own binary; the two
+   * options are mutually exclusive, so only one is ever passed.
+   */
+  const binary = CHROMIUM ? { executablePath: CHROMIUM } : { channel: 'chromium' };
+
   ctx = await chromium.launchPersistentContext(profile, {
-    executablePath: CHROMIUM,
+    ...binary,
     headless: true,
     args: [
       `--disable-extensions-except=${SRC}`,
@@ -64,7 +73,14 @@ test.before(async () => {
   });
 
   let worker = ctx.serviceWorkers()[0];
-  if (!worker) worker = await ctx.waitForEvent('serviceworker', { timeout: 20000 });
+  if (!worker) {
+    worker = await ctx.waitForEvent('serviceworker', { timeout: 30000 }).catch(() => null);
+  }
+  if (!worker) {
+    throw new Error(
+      'No service worker registered — the extension did not load. Most likely a ' +
+      'Chromium build that cannot load extensions (the headless shell).');
+  }
   extensionId = new URL(worker.url()).host;
 });
 

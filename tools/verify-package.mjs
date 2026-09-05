@@ -21,15 +21,35 @@ const unpacked = mkdtempSync(join(tmpdir(), 'aura-pkg-'));
 execFileSync('unzip', ['-q', zip, '-d', unpacked]);
 console.log(`\n  unpacked ${zip.replace(ROOT + '/', '')} → ${readdirSync(unpacked).length} top-level entries`);
 
+/**
+ * Chrome launch options for loading an unpacked extension.
+ *
+ * Playwright's default headless browser is the "headless shell", which cannot
+ * load extensions at all — the service worker simply never registers, and the
+ * extension id comes back null. Selecting `channel: 'chromium'` gets the full
+ * Chromium build with the new headless mode, which can. CHROMIUM_PATH overrides
+ * for environments that ship their own binary (the two options are mutually
+ * exclusive, so only ever pass one).
+ */
+function extensionLaunchOptions(unpackedDir) {
+  const binary = process.env.CHROMIUM_PATH
+    ? { executablePath: process.env.CHROMIUM_PATH }
+    : { channel: 'chromium' };
+  return {
+    ...binary,
+    headless: true,
+    args: [
+      `--disable-extensions-except=${unpackedDir}`,
+      `--load-extension=${unpackedDir}`,
+      '--disable-background-networking',
+      '--no-first-run',
+      '--no-default-browser-check'
+    ]
+  };
+}
+
 const profile = mkdtempSync(join(tmpdir(), 'aura-profile-'));
-const ctx = await chromium.launchPersistentContext(profile, {
-  executablePath: process.env.CHROMIUM_PATH || undefined,
-  headless: true,
-  args: [
-    `--disable-extensions-except=${unpacked}`, `--load-extension=${unpacked}`,
-    '--disable-background-networking', '--no-first-run', '--no-default-browser-check'
-  ]
-});
+const ctx = await chromium.launchPersistentContext(profile, extensionLaunchOptions(unpacked));
 
 const failures = [];
 const ok = (condition, label) => {
@@ -38,10 +58,19 @@ const ok = (condition, label) => {
 };
 
 let worker = ctx.serviceWorkers()[0];
-if (!worker) worker = await ctx.waitForEvent('serviceworker', { timeout: 20000 }).catch(() => null);
+if (!worker) worker = await ctx.waitForEvent('serviceworker', { timeout: 30000 }).catch(() => null);
 ok(Boolean(worker), 'service worker registers from the packaged build');
 
-const id = worker ? new URL(worker.url()).host : null;
+if (!worker) {
+  console.error('\n  No service worker registered — the extension did not load.');
+  console.error('  Most likely cause: a Chromium build that cannot load extensions');
+  console.error('  (the headless shell). Every later check would fail as a cascade,');
+  console.error('  so stopping here.\n');
+  await ctx.close();
+  process.exit(1);
+}
+
+const id = new URL(worker.url()).host;
 const ext = (p) => `chrome-extension://${id}/${p}`;
 
 for (const [label, path, probe] of [

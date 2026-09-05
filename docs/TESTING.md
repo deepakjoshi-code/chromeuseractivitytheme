@@ -49,6 +49,14 @@ while no packet leaves the machine.
 This is the layer that was listed as "not covered" before the beta, and it
 immediately found three defects the mocked layers could not (below).
 
+> **Gotcha, if this ever fails only in CI.** Playwright's default headless browser is the
+> *headless shell*, which cannot load extensions at all — the service worker never registers
+> and the extension id comes back `null`, so every later assertion fails as a cascade. Both
+> the e2e suite and `tools/verify-package.mjs` therefore pass `channel: 'chromium'` to select
+> the full build (verified: the same run loads the extension under the full binary and fails
+> to under the headless shell). `CHROMIUM_PATH` overrides for environments that ship their
+> own binary; the two options are mutually exclusive, so only one is ever passed.
+
 ## The tests that exist because of a specific risk
 
 Each of these traces to a numbered finding in `PRD-REVIEW.md`.
