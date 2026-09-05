@@ -22,6 +22,14 @@ All notable changes to Aura. Format follows [Keep a Changelog](https://keepachan
   chrome://extensions, the options page now reconciles on load and turns the
   setting off rather than showing a checkbox that cannot do anything.
 
+- **Ambient glow asked for access to every website.** The allow-list was enforced
+  in code, but the permission requested was the blanket http/https wildcard, so
+  Chrome showed "Read and change all your data on all websites" — the most
+  alarming prompt it has, on a product whose pitch is restraint. Aura now
+  requests only the sites in the allow-list, so the prompt names them, and the
+  content script is registered against those origins rather than all URLs.
+  Adding a site later requests access for that site.
+
 ### Notes
 Found by hand during beta testing, not by any suite — `docs/TESTING.md` had
 already recorded permission prompts as undrivable headlessly, and that is exactly
