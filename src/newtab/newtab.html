@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>New Tab</title>
+  <!--
+    boot.js is a classic (non-module) script loaded synchronously BEFORE the
+    stylesheet so the theme's custom properties are on :root in the very first
+    frame. It reads a localStorage mirror, which is synchronous — chrome.storage
+    is not, and awaiting it would guarantee a flash of unthemed content on the
+    product's hero surface (ARCHITECTURE.md §6, PRD §9).
+  -->
+  <script src="boot.js"></script>
+  <link rel="stylesheet" href="newtab.css">
+</head>
+<body>
+  <div class="stage">
+    <div class="gradient" aria-hidden="true"></div>
+    <div class="motif" id="motif" aria-hidden="true"></div>
+
+    <main class="content">
+      <p class="clock" id="clock">--:--</p>
+      <p class="greeting" id="greeting">Hello</p>
+
+      <form class="search" id="search-form" role="search">
+        <label class="sr-only" for="search-input">Search the web</label>
+        <input
+          id="search-input"
+          type="text"
+          name="q"
+          autocomplete="off"
+          spellcheck="false"
+          placeholder="Search the web"
+          aria-describedby="theme-reason">
+      </form>
+
+      <div class="theme-card">
+        <span class="dot" aria-hidden="true"></span>
+        <span class="theme-label" id="theme-label">Aura</span>
+        <span class="theme-reason" id="theme-reason"></span>
+      </div>
+    </main>
+
+    <footer class="bar">
+      <button type="button" class="chip" id="btn-pin" aria-pressed="false">Pin this theme</button>
+      <button type="button" class="chip" id="btn-reject">Not this</button>
+      <button type="button" class="chip" id="btn-options">Settings</button>
+    </footer>
+  </div>
+
+  <script type="module" src="newtab.js"></script>
+</body>
+</html>

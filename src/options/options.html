@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Aura — Settings &amp; Privacy</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+<div class="page">
+
+  <header class="masthead">
+    <h1>Aura</h1>
+    <p class="sub">Your browser, in the mood you're in. Everything below happens on this
+      device. Aura makes no network requests of any kind.</p>
+  </header>
+
+  <section class="card">
+    <h2>Expression</h2>
+    <p class="help">How much of the theme to show. Built because the same product should be
+      able to delight one person and stay out of another's way.</p>
+    <div class="segmented" id="intensity" role="radiogroup" aria-label="Intensity">
+      <button type="button" role="radio" data-value="off" aria-checked="false">Off</button>
+      <button type="button" role="radio" data-value="subtle" aria-checked="false">Subtle</button>
+      <button type="button" role="radio" data-value="balanced" aria-checked="true">Balanced</button>
+      <button type="button" role="radio" data-value="expressive" aria-checked="false">Expressive</button>
+    </div>
+
+    <div class="row">
+      <label for="scheme">Colour scheme</label>
+      <select id="scheme">
+        <option value="system">Match system</option>
+        <option value="light">Always light</option>
+        <option value="dark">Always dark</option>
+      </select>
+    </div>
+
+    <div class="row">
+      <label for="showReason">Show the “why” line on the new tab</label>
+      <input type="checkbox" id="showReason" checked>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Ambient page glow</h2>
+    <p class="help">A soft edge of colour around pages you visit. Off by default, and only
+      ever on sites you list here — Aura never asks for access to every site at install.</p>
+    <div class="row">
+      <label for="ambient">Enable ambient glow</label>
+      <input type="checkbox" id="ambient">
+    </div>
+    <label class="field-label" for="ambientSites">Allowed sites (one per line)</label>
+    <textarea id="ambientSites" rows="3" spellcheck="false"
+      placeholder="example.com&#10;news.ycombinator.com"></textarea>
+  </section>
+
+  <section class="card">
+    <h2>Muted themes</h2>
+    <p class="help">Themes Aura should never switch to.</p>
+    <div class="muted-grid" id="muted"></div>
+  </section>
+
+  <section class="card">
+    <h2>Never on these sites</h2>
+    <p class="help">Aura will not read or theme anything on these hosts. Subdomains included.</p>
+    <textarea id="blocklist" rows="4" spellcheck="false"
+      placeholder="intranet.company.com&#10;mybank.com"></textarea>
+  </section>
+
+  <section class="card">
+    <h2>What Aura has seen</h2>
+    <p class="help">The last 50 classifications. Aura stores the site's host and the words it
+      matched — never the page title, never the address, never your full search.</p>
+    <div class="log" id="log"><p class="empty">Nothing recorded yet.</p></div>
+    <div class="row-actions">
+      <button type="button" class="btn" id="clear-log">Clear this log</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Permissions, and why</h2>
+    <table class="perms">
+      <thead><tr><th>Permission</th><th>What it is for</th></tr></thead>
+      <tbody>
+        <tr><td><code>tabs</code></td><td>Read the title and address of the tab you are on. This is the only source of what Aura knows.</td></tr>
+        <tr><td><code>storage</code></td><td>Remember your settings and the current theme.</td></tr>
+        <tr><td><code>activeTab</code></td><td>Draw the ambient glow on the tab you are looking at, if you turn it on.</td></tr>
+        <tr><td><code>host access</code></td><td><strong>Optional.</strong> Requested only when you enable ambient glow, never at install.</td></tr>
+      </tbody>
+    </table>
+    <p class="help">Not requested, and never will be: browsing history, bookmarks, cookies,
+      downloads, or the contents of any page.</p>
+  </section>
+
+  <section class="card danger">
+    <h2>Always on, not optional</h2>
+    <p class="help">Aura refuses to react to anything that looks like health, money, legal
+      trouble, job hunting, dating, adult content, politics or religion. When it sees one of
+      those it scores nothing, stores nothing, and leaves the theme exactly as it was — because
+      snapping to a “neutral” theme would itself tell anyone watching your screen that
+      something private is on it. There is no switch for this, by design.</p>
+    <p class="help">Aura is also disabled in Incognito windows and cannot be enabled there.</p>
+  </section>
+
+  <section class="card danger">
+    <h2>Erase everything</h2>
+    <p class="help">Clears settings, history, pins and rejections. Cannot be undone.</p>
+    <div class="row-actions">
+      <button type="button" class="btn destructive" id="erase">Erase all Aura data</button>
+      <span class="status" id="erase-status" role="status"></span>
+    </div>
+  </section>
+
+  <p class="saved" id="saved" role="status"></p>
+</div>
+
+<script type="module" src="options.js"></script>
+</body>
+</html>

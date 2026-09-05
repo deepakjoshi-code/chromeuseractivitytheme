@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Aura</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header class="head">
+    <div class="now">
+      <span class="dot" id="dot" aria-hidden="true"></span>
+      <div class="now-text">
+        <h1 id="theme-label">Aura</h1>
+        <!-- PRD B1 / gap G-04: the product must say why, in one sentence. -->
+        <p id="theme-reason" class="reason">Reading your activity…</p>
+      </div>
+    </div>
+
+    <label class="switch">
+      <input type="checkbox" id="enabled" checked>
+      <span class="track" aria-hidden="true"></span>
+      <span class="sr-only">Aura enabled</span>
+    </label>
+  </header>
+
+  <div class="meter" id="meter-wrap" role="img" aria-label="Detection confidence">
+    <div class="meter-fill" id="meter"></div>
+  </div>
+  <p class="meter-caption" id="meter-caption">confidence</p>
+
+  <div class="actions">
+    <button type="button" class="btn" id="btn-pin" aria-pressed="false">Pin</button>
+    <button type="button" class="btn" id="btn-reject">Not this</button>
+  </div>
+
+  <div class="pin-durations" id="pin-durations" hidden>
+    <button type="button" class="btn small" data-minutes="60">1 hour</button>
+    <button type="button" class="btn small" data-minutes="480">Today</button>
+    <button type="button" class="btn small" data-minutes="0">Until I unpin</button>
+  </div>
+
+  <section class="gallery-section">
+    <h2>Themes</h2>
+    <div class="gallery" id="gallery" role="listbox" aria-label="Choose a theme"></div>
+  </section>
+
+  <footer class="foot">
+    <button type="button" class="link" id="btn-options">Settings &amp; privacy</button>
+    <span class="pledge" title="Aura makes no network requests of any kind.">On-device only</span>
+  </footer>
+
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

@@ -1,0 +1,238 @@
+/*
+ * newtab.css — the hero surface.
+ *
+ * Neutral values here are the fallback that boot.js overrides on the first
+ * frame. They are also what a user sees if the mirror is empty, so they must
+ * look deliberate rather than broken.
+ */
+
+:root {
+  --aura-bg: #f7f7f8;
+  --aura-surface: #ffffff;
+  --aura-text: #23252b;
+  --aura-text-muted: #565b66;
+  --aura-accent: #4b5563;
+  --aura-on-accent: #ffffff;
+  --aura-grad-1: #e8eaee;
+  --aura-grad-2: #eeeaf0;
+  --aura-grad-3: #e6ecec;
+  --aura-grad-opacity: 0.75;
+  --aura-motif-opacity: 0.12;
+  --aura-motion: 1;
+
+  --aura-ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --aura-fade: 600ms;   /* PRD A5: never a flash */
+}
+
+* { box-sizing: border-box; }
+
+/* A class-level `display` beats the `hidden` attribute's UA style; restore it. */
+[hidden] { display: none !important; }
+
+html, body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--aura-bg);
+  color: var(--aura-text);
+  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  transition: background-color var(--aura-fade) var(--aura-ease),
+              color var(--aura-fade) var(--aura-ease);
+  overflow: hidden;
+}
+
+.sr-only {
+  position: absolute; width: 1px; height: 1px;
+  padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+.stage {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  isolation: isolate;
+}
+
+/* ---- decorative layers. Text never sits on these; it sits on .theme-card. -- */
+
+.gradient {
+  position: absolute;
+  inset: -10%;
+  z-index: -2;
+  opacity: var(--aura-grad-opacity);
+  background:
+    radial-gradient(58% 55% at 18% 22%, var(--aura-grad-1) 0%, transparent 68%),
+    radial-gradient(52% 50% at 82% 30%, var(--aura-grad-2) 0%, transparent 66%),
+    radial-gradient(62% 60% at 50% 92%, var(--aura-grad-3) 0%, transparent 70%);
+  transition: opacity var(--aura-fade) var(--aura-ease),
+              background var(--aura-fade) var(--aura-ease);
+  animation: drift 42s var(--aura-ease) infinite alternate;
+}
+
+@keyframes drift {
+  from { transform: scale(1) translate3d(0, 0, 0); }
+  to   { transform: scale(1.08) translate3d(-2%, -1.5%, 0); }
+}
+
+/*
+ * One large motif, low and to the right — not a tiled pattern. Tiling reads as
+ * wallpaper and competes with the clock; a single quiet mark reads as
+ * atmosphere, which is the whole point of the surface.
+ */
+.motif {
+  position: absolute;
+  right: -3vmin;
+  bottom: -5vmin;
+  width: min(42vmin, 420px);
+  height: min(42vmin, 420px);
+  z-index: -1;
+  color: var(--aura-accent);
+  opacity: var(--aura-motif-opacity);
+  transition: opacity var(--aura-fade) var(--aura-ease);
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+  transform: rotate(-8deg);
+}
+
+/* ------------------------------------------------------------------ content */
+
+.content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  width: min(620px, 88vw);
+  text-align: center;
+}
+
+.clock {
+  margin: 0;
+  font-size: clamp(56px, 9vw, 104px);
+  font-weight: 200;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.greeting {
+  margin: 0 0 10px;
+  font-size: 19px;
+  color: var(--aura-text-muted);
+}
+
+.search { width: 100%; }
+
+.search input {
+  width: 100%;
+  padding: 15px 20px;
+  font-size: 16px;
+  font-family: inherit;
+  color: var(--aura-text);
+  background: var(--aura-surface);
+  border: 1px solid color-mix(in srgb, var(--aura-text) 14%, transparent);
+  border-radius: 999px;
+  outline: none;
+  box-shadow: 0 2px 18px color-mix(in srgb, var(--aura-text) 8%, transparent);
+  transition: background-color var(--aura-fade) var(--aura-ease),
+              border-color var(--aura-fade) var(--aura-ease),
+              box-shadow 180ms var(--aura-ease);
+}
+
+.search input::placeholder { color: var(--aura-text-muted); opacity: 0.85; }
+
+.search input:focus-visible {
+  border-color: var(--aura-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--aura-accent) 32%, transparent);
+}
+
+.theme-card {
+  display: inline-flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px 9px;
+  max-width: min(92vw, 760px);
+  margin-top: 6px;
+  padding: 8px 15px;
+  font-size: 13.5px;
+  background: var(--aura-surface);
+  border-radius: 999px;
+  box-shadow: 0 1px 10px color-mix(in srgb, var(--aura-text) 7%, transparent);
+  transition: background-color var(--aura-fade) var(--aura-ease);
+}
+
+.dot {
+  flex: none;
+  width: 9px; height: 9px;
+  border-radius: 50%;
+  background: var(--aura-accent);
+  transition: background-color var(--aura-fade) var(--aura-ease);
+}
+
+.theme-label { font-weight: 600; }
+
+.theme-reason {
+  color: var(--aura-text-muted);
+  /* Wrap rather than truncate: a half-shown explanation is worse than none. */
+  overflow-wrap: anywhere;
+}
+
+.theme-reason:empty { display: none; }
+
+/* ---------------------------------------------------------------- controls */
+
+.bar {
+  position: absolute;
+  bottom: 26px;
+  display: flex;
+  gap: 8px;
+  opacity: 0;
+  transition: opacity 220ms var(--aura-ease);
+}
+
+.stage:hover .bar,
+.bar:focus-within { opacity: 1; }
+
+.chip {
+  padding: 7px 14px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--aura-text-muted);
+  background: var(--aura-surface);
+  border: 1px solid color-mix(in srgb, var(--aura-text) 12%, transparent);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: color 160ms, border-color 160ms, background-color 160ms;
+}
+
+.chip:hover { color: var(--aura-text); border-color: var(--aura-accent); }
+
+.chip:focus-visible {
+  outline: 2px solid var(--aura-accent);
+  outline-offset: 2px;
+}
+
+.chip[aria-pressed="true"] {
+  color: var(--aura-on-accent);
+  background: var(--aura-accent);
+  border-color: var(--aura-accent);
+}
+
+/* --------------------------------------------------- accessibility (PRD A8) */
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation: none !important;
+    transition-duration: 1ms !important;
+  }
+}
+
+/* Intensity "off"/"subtle" zero out the motif; also stop the drift entirely. */
+:root[data-aura-motion="0"] .gradient { animation: none; }

@@ -1,0 +1,17 @@
+/*
+ * ambient.css — intentionally minimal.
+ *
+ * The overlay's own styling is set inline in ambient.js so it cannot be
+ * defeated by a page stylesheet loading later. This file exists only to
+ * guarantee the element is inert and unselectable even if a page has a
+ * catch-all rule that would otherwise re-enable pointer events on it.
+ */
+#aura-ambient-root {
+  pointer-events: none !important;
+  user-select: none !important;
+  contain: strict;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #aura-ambient-root { transition: none !important; }
+}

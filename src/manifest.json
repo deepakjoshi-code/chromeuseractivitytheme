@@ -1,0 +1,46 @@
+{
+  "manifest_version": 3,
+  "name": "Aura — Context-Aware Themes",
+  "version": "1.0.0",
+  "description": "Your browser, in the mood you're in. Adapts your New Tab to what you're doing — entirely on your device, with zero network access.",
+  "minimum_chrome_version": "116",
+
+  "permissions": ["tabs", "storage", "activeTab", "scripting"],
+  "optional_host_permissions": ["http://*/*", "https://*/*"],
+  "host_permissions": [],
+
+  "incognito": "not_allowed",
+
+  "background": {
+    "service_worker": "background/service-worker.js",
+    "type": "module"
+  },
+
+  "chrome_url_overrides": {
+    "newtab": "newtab/newtab.html"
+  },
+
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "Aura",
+    "default_icon": {
+      "16": "assets/icons/icon16.png",
+      "32": "assets/icons/icon32.png",
+      "48": "assets/icons/icon48.png",
+      "128": "assets/icons/icon128.png"
+    }
+  },
+
+  "options_page": "options/options.html",
+
+  "icons": {
+    "16": "assets/icons/icon16.png",
+    "32": "assets/icons/icon32.png",
+    "48": "assets/icons/icon48.png",
+    "128": "assets/icons/icon128.png"
+  },
+
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'none'; connect-src 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline'"
+  }
+}
