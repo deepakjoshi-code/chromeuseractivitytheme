@@ -162,6 +162,17 @@ Suggested screenshot order: `tropical` → `celebration` → `coding` → `popup
 
 ---
 
+## Pre-flight
+
+Do these **before** opening the dashboard, or the Privacy practices tab will fail review:
+
+- [ ] **The repository is public.** The privacy policy URL below and the contact link inside
+      `PRIVACY.md` both point at this repo. While it is private a reviewer gets a 404, which
+      is a routine rejection. Settings → Danger Zone → Change visibility → Public.
+- [ ] **`LICENSE` is present.** The listing and README describe Aura as open source; without a
+      license file the code is legally "all rights reserved" and that claim is hollow.
+- [ ] **`npm run verify` passes** — builds the zip and loads it in real Chrome.
+
 ## Submission steps
 
 1. `npm run build` → `dist/aura-0.9.0.zip`
