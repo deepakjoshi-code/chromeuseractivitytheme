@@ -33,5 +33,7 @@ export const KEYS = {
   PIN: 'pin',
   LOG: 'log',
   REJECTIONS: 'rejections',
-  CONTEXT: 'contextState'
+  CONTEXT: 'contextState',
+  /** Incremented on erase, so in-flight writes cannot resurrect erased data. */
+  EPOCH: 'epoch'
 };

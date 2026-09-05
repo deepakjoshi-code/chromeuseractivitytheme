@@ -10,48 +10,67 @@ import * as engine from '../../src/core/engine.js';
 import * as store from '../../src/core/storage.js';
 import { NEUTRAL } from '../../src/core/taxonomy.js';
 
-/** Feed a signal repeatedly until the engine accepts a change, or give up. */
-async function drive(ns, signal, { start = 0, step = 6000, times = 6 } = {}) {
+const search = (query) => ({
+  url: `https://www.google.com/search?q=${encodeURIComponent(query)}`,
+  title: `${query} - Google Search`,
+  tabId: 1
+});
+
+/** A realistic mini-session: a user refining a search across several queries. */
+const session = (...queries) => queries.map(search);
+
+/**
+ * Replay a browsing session.
+ *
+ * Signals must be genuinely distinct pages, because the engine de-duplicates
+ * the same page in the same tab within DEDUPE_MS — repeating one identical
+ * signal is a tab switch, not new activity.
+ */
+async function drive(ns, signals, { start = 0, step = 6000 } = {}) {
+  const list = Array.isArray(signals) ? signals : [signals];
   let t = start;
   const outcomes = [];
-  for (let i = 0; i < times; i++) {
+  for (const signal of list) {
     t += step;
-    outcomes.push(await engine.handleSignal(ns, signal, t));
+    outcomes.push(await engine.handleSignal(ns, { tabId: 1, ...signal }, t));
   }
   return { outcomes, t };
 }
-
-const search = (query) => ({
-  url: `https://www.google.com/search?q=${encodeURIComponent(query)}`,
-  title: `${query} - Google Search`
-});
 
 /* ------------------------------------------------------- the happy paths */
 
 test('a sustained search for a Hawaii holiday themes the browser tropical', async () => {
   const ns = createChromeMock();
-  await drive(ns, search('hawaii vacation packages maui snorkeling'));
+  await drive(ns, session(
+    'hawaii vacation packages', 'maui snorkeling tours', 'best beach resort maui',
+    'hawaii flights deals', 'kauai or maui island'));
   assert.equal((await store.getActiveTheme(ns)).category, 'tropical');
 });
 
 test('a sustained search for a kids party themes the browser celebration', async () => {
   const ns = createChromeMock();
-  await drive(ns, search('kids birthday party cake balloons'));
+  await drive(ns, session(
+    'birthday cake ideas', 'kids party games', 'party favors and balloons',
+    'pinata for birthday party', 'birthday party decorations'));
   assert.equal((await store.getActiveTheme(ns)).category, 'celebration');
 });
 
 test('working on GitHub themes the browser for focus', async () => {
   const ns = createChromeMock();
-  await drive(ns, {
-    url: 'https://github.com/acme/service/pull/42',
-    title: 'Fix merge conflict in scheduler by dev · Pull Request #42'
-  });
+  await drive(ns, [
+    { url: 'https://github.com/acme/service/pull/42', title: 'Fix merge conflict in scheduler · Pull Request #42' },
+    { url: 'https://github.com/acme/service/pull/43', title: 'Add unit test for retry budget · Pull Request #43' },
+    { url: 'https://stackoverflow.com/questions/9/async-await', title: 'javascript async await ordering' },
+    { url: 'https://kubernetes.io/docs/ingress/', title: 'Ingress | Kubernetes' }
+  ]);
   assert.equal((await store.getActiveTheme(ns)).category, 'coding');
 });
 
 test('the accepted change carries the reasons that justify it (PRD B1)', async () => {
   const ns = createChromeMock();
-  const { outcomes } = await drive(ns, search('las vegas casino shows'));
+  const { outcomes } = await drive(ns, session(
+    'las vegas casino shows', 'vegas hotels on the strip', 'bellagio fountain show',
+    'best vegas nightclub', 'vegas sportsbook odds'));
   const accepted = outcomes.find((o) => o.outcome === engine.OUTCOME.CHANGED);
   assert.ok(accepted, 'expected a change');
   assert.equal(accepted.category, 'vegas');
@@ -64,7 +83,8 @@ test('the accepted change carries the reasons that justify it (PRD B1)', async (
 
 test('a sensitive page changes NOTHING and leaks nothing (PRD P4)', async () => {
   const ns = createChromeMock();
-  await drive(ns, search('hawaii vacation maui'));
+  await drive(ns, session(
+    'hawaii vacation maui', 'maui snorkeling', 'beach resort oahu', 'kauai travel guide'));
   const before = await store.getActiveTheme(ns);
   assert.equal(before.category, 'tropical');
 
@@ -91,7 +111,9 @@ test('a sensitive host is blocked even with entirely benign page text', async ()
 
 test('repeated sensitive signals never accumulate evidence', async () => {
   const ns = createChromeMock();
-  await drive(ns, search('bankruptcy filing lawyer'), { times: 10 });
+  await drive(ns, session(
+    'bankruptcy filing lawyer', 'chapter 7 bankruptcy cost', 'debt collector rights',
+    'foreclosure timeline', 'credit score after bankruptcy'));
   assert.equal((await store.getActiveTheme(ns)).category, NEUTRAL);
   assert.equal(await store.getContextState(ns), null, 'nothing was ever scored');
 });
@@ -125,7 +147,9 @@ test('internal browser pages are ignored', async () => {
 test('muted categories are never applied (PRD B7)', async () => {
   const ns = createChromeMock();
   await store.updateSettings(ns, { mutedCategories: ['celebration'] });
-  await drive(ns, search('birthday cake balloons party'));
+  await drive(ns, session(
+    'birthday cake ideas', 'kids party games', 'party favors balloons',
+    'pinata birthday', 'birthday decorations'));
   assert.notEqual((await store.getActiveTheme(ns)).category, 'celebration');
 });
 
@@ -134,7 +158,9 @@ test('muted categories are never applied (PRD B7)', async () => {
 test('a pin overrides detection entirely (PRD B2)', async () => {
   const ns = createChromeMock();
   await engine.pinTheme(ns, 'coding', 0, 1000);
-  const { outcomes } = await drive(ns, search('hawaii vacation maui snorkeling'), { start: 2000 });
+  const { outcomes } = await drive(ns, session(
+    'hawaii vacation maui', 'maui snorkeling tours', 'beach resort oahu',
+    'kauai travel guide'), { start: 2000 });
   assert.ok(outcomes.every((o) => o.outcome === engine.OUTCOME.PINNED));
   assert.equal((await store.getActiveTheme(ns)).category, 'coding');
 });
@@ -160,15 +186,20 @@ test('getFullState reports the pinned theme and says so', async () => {
 
 test('rejecting a theme reverts it and stops it recurring on that host', async () => {
   const ns = createChromeMock();
-  const signal = { url: 'https://example.com/islands', title: 'Bali beach resort tropical island vacation' };
-  await drive(ns, signal);
+  const pages = [
+    { url: 'https://example.com/islands/bali', title: 'Bali beach resort tropical island' },
+    { url: 'https://example.com/islands/maui', title: 'Maui snorkeling and luau guide' },
+    { url: 'https://example.com/islands/fiji', title: 'Fiji overwater bungalow vacation' },
+    { url: 'https://example.com/islands/aruba', title: 'Aruba beach vacation packages' }
+  ];
+  await drive(ns, pages);
   assert.equal((await store.getActiveTheme(ns)).category, 'tropical');
 
   await engine.rejectCurrent(ns, 'example.com', 100000);
   assert.equal((await store.getActiveTheme(ns)).category, NEUTRAL);
   assert.deepEqual((await store.getRejections(ns))['example.com'], ['tropical']);
 
-  await drive(ns, signal, { start: 200000 });
+  await drive(ns, pages, { start: 200000 });
   assert.notEqual((await store.getActiveTheme(ns)).category, 'tropical',
     'the same misfire must not immediately return');
 });
@@ -176,7 +207,12 @@ test('rejecting a theme reverts it and stops it recurring on that host', async (
 test('a rejection is scoped to its host', async () => {
   const ns = createChromeMock();
   await store.addRejection(ns, 'example.com', 'tropical');
-  await drive(ns, { url: 'https://elsewhere.test/x', title: 'Bali beach resort tropical island vacation' });
+  await drive(ns, [
+    { url: 'https://elsewhere.test/bali', title: 'Bali beach resort tropical island' },
+    { url: 'https://elsewhere.test/maui', title: 'Maui snorkeling and luau guide' },
+    { url: 'https://elsewhere.test/fiji', title: 'Fiji overwater bungalow vacation' },
+    { url: 'https://elsewhere.test/aruba', title: 'Aruba beach vacation packages' }
+  ]);
   assert.equal((await store.getActiveTheme(ns)).category, 'tropical');
 });
 

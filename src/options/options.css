@@ -152,3 +152,16 @@ input[type="checkbox"] { width: 17px; height: 17px; accent-color: var(--accent);
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition-duration: 1ms !important; animation: none !important; }
 }
+
+/* ------------------------------------------------------------------- beta */
+
+.beta {
+  margin-top: 26px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+  font-size: 12.8px;
+  color: var(--muted);
+}
+.beta p { margin: 0 0 8px; max-width: 62ch; }
+.beta p:last-child { margin-bottom: 0; }
+.beta a { color: var(--accent); }

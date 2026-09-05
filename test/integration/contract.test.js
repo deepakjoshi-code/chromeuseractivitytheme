@@ -109,7 +109,12 @@ test('no source file performs a network call (PRD P1, layer 2)', () => {
 });
 
 test('the only external URL in the source is the search-box navigation', () => {
-  const allowed = new Set(['https://www.google.com/search?q=']);
+  const allowed = new Set([
+    'https://www.google.com/search?q=',
+    // Beta feedback link in the options page. A navigation the user clicks,
+    // never a request the extension makes.
+    'https://github.com/deepakjoshi-code/chromeuseractivitytheme/issues'
+  ]);
   const found = [];
   for (const file of walk(SRC, ['.js', '.css', '.html'])) {
     const source = readFileSync(file, 'utf8');

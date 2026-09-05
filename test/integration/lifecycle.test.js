@@ -14,7 +14,7 @@ import * as store from '../../src/core/storage.js';
 import { NEUTRAL } from '../../src/core/taxonomy.js';
 import { KEYS } from '../../src/core/messages.js';
 
-const search = (q) => ({ url: `https://www.google.com/search?q=${encodeURIComponent(q)}`, title: q });
+const search = (q) => ({ url: `https://www.google.com/search?q=${encodeURIComponent(q)}`, title: q, tabId: 1 });
 
 test('accumulated context survives a worker sleep/wake cycle', async () => {
   const ns = createChromeMock();
@@ -25,7 +25,7 @@ test('accumulated context survives a worker sleep/wake cycle', async () => {
   assert.ok(persisted.scores.tropical.value > 0);
 
   // ... worker dies here; nothing is carried over but storage ...
-  await engine.handleSignal(ns, search('hawaii maui snorkeling'), 7000);
+  await engine.handleSignal(ns, search('maui beach resort luau'), 7000);
   assert.equal((await store.getActiveTheme(ns)).category, 'tropical',
     'evidence from before the sleep must still count');
 });
@@ -46,7 +46,7 @@ test('a browser restart clears context but keeps settings and the last theme', a
   const ns = createChromeMock();
   await store.updateSettings(ns, { intensity: 'subtle', blocklist: ['x.com'] });
   await engine.handleSignal(ns, search('hawaii maui snorkeling'), 1000);
-  await engine.handleSignal(ns, search('hawaii maui snorkeling'), 7000);
+  await engine.handleSignal(ns, search('maui beach resort luau'), 7000);
   assert.equal((await store.getActiveTheme(ns)).category, 'tropical');
 
   // chrome.storage.session is cleared on browser restart.
@@ -92,4 +92,72 @@ test('concurrent signals do not corrupt stored state', async () => {
   const state = await store.getContextState(ns);
   assert.ok(state && typeof state.decayedAt === 'number');
   assert.ok(Object.values(state.scores).every((entry) => typeof entry.value === 'number'));
+});
+
+/* ------------------------------------ de-duplication and the erase race ---- */
+
+test('the same page in the same tab is not scored twice (tab switching)', async () => {
+  const ns = createChromeMock();
+  const page = { url: 'https://github.com/acme/api/pull/1', title: 'Fix merge conflict · PR #1', tabId: 7 };
+
+  const first = await engine.handleSignal(ns, page, 1000);
+  const second = await engine.handleSignal(ns, page, 4000);
+  assert.equal(second.outcome, engine.OUTCOME.DUPLICATE,
+    'switching back to an open tab is not new activity');
+
+  const scores = (await store.getContextState(ns)).scores;
+  assert.equal(scores.coding.value, first.confidence || scores.coding.value,
+    'evidence must not accumulate from a re-activation');
+  assert.equal((await store.getLog(ns)).length, 1, 'and it must not be logged twice');
+});
+
+test('the same page in a different tab is a genuine second signal', async () => {
+  const ns = createChromeMock();
+  const page = { url: 'https://github.com/acme/api/pull/1', title: 'Fix merge conflict · PR #1' };
+  await engine.handleSignal(ns, { ...page, tabId: 1 }, 1000);
+  const other = await engine.handleSignal(ns, { ...page, tabId: 2 }, 2000);
+  assert.notEqual(other.outcome, engine.OUTCOME.DUPLICATE);
+});
+
+test('the de-dupe window expires, so revisiting a page later counts again', async () => {
+  const ns = createChromeMock();
+  const page = { url: 'https://github.com/acme/api/pull/1', title: 'Fix merge conflict · PR #1', tabId: 7 };
+  await engine.handleSignal(ns, page, 1000);
+  const later = await engine.handleSignal(ns, page, 1000 + engine.DEDUPE_MS + 1);
+  assert.notEqual(later.outcome, engine.OUTCOME.DUPLICATE);
+});
+
+test('de-dupe memory is pruned so session state stays bounded', async () => {
+  const ns = createChromeMock();
+  for (let i = 0; i < 40; i++) {
+    await engine.handleSignal(ns,
+      { url: `https://example.com/p${i}`, title: `page ${i}`, tabId: i }, i * 1000);
+  }
+  const recent = (await store.getContextState(ns)).recent;
+  const span = engine.DEDUPE_MS / 1000;
+  assert.ok(Object.keys(recent).length <= span + 1,
+    `expected at most ~${span} live entries, got ${Object.keys(recent).length}`);
+});
+
+test('a signal already in flight cannot resurrect data after Erase everything', async () => {
+  const ns = createChromeMock();
+  await engine.handleSignal(ns, search('birthday cake balloons'), 1000);
+  assert.ok((await store.getLog(ns)).length > 0);
+
+  // Capture the epoch the way handleSignal does, then erase underneath it.
+  const staleEpoch = await store.getEpoch(ns);
+  await store.eraseAll(ns);
+
+  await store.appendLog(ns, { host: 'x.com', category: 'coding', confidence: 1, terms: [], at: 2000 }, staleEpoch);
+  await store.setActiveTheme(ns, { category: 'coding', confidence: 1, reasons: [], at: 2000 }, staleEpoch);
+
+  assert.deepEqual(await store.getLog(ns), [], 'the late write must be dropped');
+  assert.equal((await store.getActiveTheme(ns)).category, NEUTRAL);
+});
+
+test('writes without a stale epoch still work normally', async () => {
+  const ns = createChromeMock();
+  await store.appendLog(ns, { host: 'x.com', category: 'coding', confidence: 1, terms: [], at: 1 },
+    await store.getEpoch(ns));
+  assert.equal((await store.getLog(ns)).length, 1);
 });

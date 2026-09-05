@@ -194,7 +194,7 @@ Naive per-tab theming produces a strobe light. Required behaviour:
 - **Confidence floor** — below 0.35 confidence the theme does not change.
 - **Switch margin** — a challenger must carry **≥35% more accumulated evidence** than the
   incumbent to take over.
-- **Staleness waiver** — if the incumbent context has had no reinforcement for 45s, the
+- **Staleness waiver** — if the incumbent context has had no reinforcement for 15s, the
   margin is waived. The user has plainly moved on; making them fight the damper is wrong.
 - **Concurrent contexts hold.** If two contexts are *both* being actively reinforced, the
   incumbent keeps the screen until one of them goes quiet. Flip-flopping between two things
@@ -203,6 +203,9 @@ Naive per-tab theming produces a strobe light. Required behaviour:
 - **Decay** — a context's evidence halves every **2 minutes** without reinforcement.
 - **Evidence ceiling** — accumulated evidence is capped so a long session cannot ossify.
 - **Rate limit** — at most one theme change per 10 seconds.
+- **Per-tab de-duplication** — the same page in the same tab is scored at most once per 30s.
+  Returning to an already-open tab must not re-score it, or a tab the user alt-tabs to
+  repeatedly would dominate the context purely by being switched to.
 
 > **Revised during implementation.** The switch margin was first specified as an absolute
 > +0.15 on *confidence*. That is unimplementable as intended: confidence saturates, so after a
@@ -213,6 +216,9 @@ Naive per-tab theming produces a strobe light. Required behaviour:
 > The floor remains absolute, where a threshold is the right shape. The decay half-life was
 > also shortened from 5 minutes to 2, because at 5 minutes a morning's accumulated context
 > still outweighed the last two minutes of browsing — the opposite of what this product is for.
+> The staleness window was then cut from 45s to 15s after real-browser testing: with two
+> contexts both at the evidence ceiling the ratio is a tie that only staleness can break, so
+> 45s meant a decisive context switch could sit unreflected for most of a minute.
 
 ### 7.4 Intensity levels
 | Level | New Tab | Ambient frame | Motion |

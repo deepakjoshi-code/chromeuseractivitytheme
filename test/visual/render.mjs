@@ -57,7 +57,7 @@ await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
 const base = `http://127.0.0.1:${server.address().port}`;
 
 const browser = await chromium.launch({
-  executablePath: process.env.CHROMIUM_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
+  executablePath: process.env.CHROMIUM_PATH || undefined,
   // Chromium's own telemetry/safe-browsing traffic is not the extension's, and
   // this environment has no egress for it. Turn it off so the run is quiet.
   args: [

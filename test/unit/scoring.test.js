@@ -82,10 +82,11 @@ test('a challenger with only a slight lead is held off by the margin', () => {
   state = commit(state, decide(state, 200, C), 200);
   assert.equal(state.active, 'celebration');
 
-  // Give coding a lead too small to clear 1.35x, within the staleness window.
-  state = ingest(state, hit('coding', 0.9), 20000, C);
-  state = ingest(state, hit('coding', 0.9), 20100, C);
-  const decision = decide(state, 20200, C);
+  // Give coding a lead too small to clear 1.35x, while the incumbent is still fresh.
+  state = ingest(state, hit('coding', 0.9), 8000, C);
+  state = ingest(state, hit('coding', 0.9), 8100, C);
+  const decision = decide(state, 8200, C);
+  assert.ok(8200 - 200 < C.stalenessMs, 'the staleness waiver must not be in play here');
   assert.equal(decision.changed, false);
   assert.equal(decision.reason, 'below-margin');
 });
@@ -119,9 +120,10 @@ test('REGRESSION: a heavily reinforced incumbent is displaced in bounded time', 
 
   // Both contexts are now saturated at the evidence ceiling.
   const lastCelebration = t;
-  for (let i = 0; i < 25; i++) { t += 1000; state = ingest(state, hit('coding', 0.95), t, C); }
+  for (let i = 0; i < 10; i++) { t += 1000; state = ingest(state, hit('coding', 0.95), t, C); }
 
   assert.ok(evidenceOf(decayScores(state.scores, state.decayedAt, t, C), 'coding') > 2.5);
+  assert.ok(t - lastCelebration < C.stalenessMs, 'the incumbent is still fresh here');
   assert.equal(decide(state, t, C).changed, false,
     'while both contexts are saturated and recent, the incumbent holds');
 
@@ -131,7 +133,8 @@ test('REGRESSION: a heavily reinforced incumbent is displaced in bounded time', 
   assert.equal(decision.changed, true,
     'saturation must not make an entrenched incumbent unbeatable');
   assert.equal(decision.category, 'coding');
-  assert.ok(after - lastCelebration < 60000, 'displacement must happen within a minute');
+  assert.ok(after - lastCelebration <= 20000,
+    'a decisive switch must land within ~20s, not most of a minute');
 });
 
 test('two concurrently active contexts do not flip-flop', () => {
@@ -167,8 +170,9 @@ test('the margin is waived once the incumbent has gone quiet', () => {
   const later = 200 + C.stalenessMs + 1000;
   state = ingest(state, hit('coding', 0.8), later, C);
   state = ingest(state, hit('coding', 0.8), later + 100, C);
-  state = ingest(state, hit('coding', 0.8), later + 200, C);   // satisfies dwell
-  const decision = decide(state, later + 300, C);
+  state = ingest(state, hit('coding', 0.8), later + 200, C);
+  state = ingest(state, hit('coding', 0.8), later + 300, C);   // satisfies dwell
+  const decision = decide(state, later + 400, C);
   assert.equal(decision.changed, true, 'the user has plainly moved on');
   assert.equal(decision.category, 'coding');
 });
