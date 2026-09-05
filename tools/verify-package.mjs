@@ -42,6 +42,9 @@ function extensionLaunchOptions(unpackedDir) {
       `--disable-extensions-except=${unpackedDir}`,
       `--load-extension=${unpackedDir}`,
       '--disable-background-networking',
+      // Chrome inherits http(s)_proxy from the environment; this harness must
+      // never attempt egress while verifying an extension that makes none.
+      '--no-proxy-server',
       '--no-first-run',
       '--no-default-browser-check'
     ]

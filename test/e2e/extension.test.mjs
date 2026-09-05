@@ -10,12 +10,20 @@
  * hostname to a local server, so the extension sees genuine hosts like
  * `google.com` and `github.com` while no packet leaves the machine.
  *
+ * The local server speaks TLS with a throwaway self-signed certificate, and
+ * Chrome is launched with --ignore-certificate-errors. This is not optional:
+ * google.com, github.com and etsy.com are all on Chrome's HSTS preload list, so
+ * a plain http:// navigation to them is force-upgraded to https:// before it
+ * ever reaches the network stack. Serving HTTP would fail with
+ * ERR_SSL_PROTOCOL_ERROR on exactly the hosts this suite needs most.
+ *
  * Run: npm run test:e2e
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import http from 'node:http';
-import { mkdtempSync, rmSync } from 'node:fs';
+import https from 'node:https';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -24,9 +32,23 @@ import { chromium } from 'playwright';
 const SRC = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'src');
 const CHROMIUM = process.env.CHROMIUM_PATH || undefined;
 
+/** A throwaway certificate for the local stand-in server. Never leaves the box. */
+function selfSignedCert() {
+  const dir = mkdtempSync(join(tmpdir(), 'aura-cert-'));
+  const keyPath = join(dir, 'key.pem');
+  const certPath = join(dir, 'cert.pem');
+  execFileSync('openssl', [
+    'req', '-x509', '-newkey', 'rsa:2048', '-nodes',
+    '-keyout', keyPath, '-out', certPath,
+    '-days', '1', '-subj', '/CN=localhost'
+  ], { stdio: 'ignore' });
+  return { key: readFileSync(keyPath), cert: readFileSync(certPath), dir };
+}
+
 /** Serves a plausible page for any host, with a title driven by the path/query. */
 function startSite() {
-  const server = http.createServer((req, res) => {
+  const tls = selfSignedCert();
+  const server = https.createServer({ key: tls.key, cert: tls.cert }, (req, res) => {
     const url = new URL(req.url, `http://${req.headers.host || 'x.test'}`);
     const title = url.searchParams.get('title')
       || url.searchParams.get('q')
@@ -38,7 +60,8 @@ function startSite() {
       <body><h1>${title}</h1></body></html>`);
   });
   return new Promise((resolve) => {
-    server.listen(0, '127.0.0.1', () => resolve({ server, port: server.address().port }));
+    server.listen(0, '127.0.0.1', () =>
+      resolve({ server, port: server.address().port, certDir: tls.dir }));
   });
 }
 
@@ -66,6 +89,11 @@ test.before(async () => {
       // Every hostname resolves to the local server: real hosts, zero egress.
       `--host-resolver-rules=MAP * 127.0.0.1:${site.port}, EXCLUDE localhost`,
       '--ignore-certificate-errors',
+      // Chrome inherits http(s)_proxy from the environment. Left alone it would
+      // CONNECT through that proxy instead of honouring the resolver rules
+      // above — which both breaks the suite and attempts real egress. Neither
+      // is acceptable in a test for an extension that promises zero network.
+      '--no-proxy-server',
       '--disable-background-networking',
       '--no-first-run',
       '--no-default-browser-check'
@@ -86,7 +114,10 @@ test.before(async () => {
 
 test.after(async () => {
   if (ctx) await ctx.close();
-  if (site) site.server.close();
+  if (site) {
+    site.server.close();
+    rmSync(site.certDir, { recursive: true, force: true });
+  }
   if (profile) rmSync(profile, { recursive: true, force: true });
 });
 
@@ -161,7 +192,7 @@ test('real browsing drives a real theme change', async () => {
   // same tab, so hammering one URL is (correctly) a single signal.
   for (const q of ['hawaii+vacation+packages', 'maui+snorkeling+tours',
                    'best+beach+resort+maui', 'kauai+travel+guide']) {
-    await visit(page, `http://www.google.com/search?q=${q}`);
+    await visit(page, `https://www.google.com/search?q=${q}`);
   }
   const active = await readStorage('activeTheme');
   assert.equal(active.category, 'tropical', `got ${JSON.stringify(active)}`);
@@ -187,12 +218,12 @@ test('a switch to engineering work re-themes the browser within ~20s', async () 
   const page = await ctx.newPage();
   const started = Date.now();
   const pages = [
-    'http://github.com/acme/api/pull/1?title=Fix+merge+conflict+Pull+Request',
-    'http://stackoverflow.com/q/1?title=javascript+async+await+ordering',
-    'http://github.com/acme/api/pull/2?title=Add+unit+test+npm+install',
-    'http://kubernetes.io/docs/ingress?title=Ingress+Kubernetes+docs',
-    'http://github.com/acme/api/actions?title=GitHub+Actions+ci+pipeline',
-    'http://developer.mozilla.org/regex?title=regex+async+await+MDN'
+    'https://github.com/acme/api/pull/1?title=Fix+merge+conflict+Pull+Request',
+    'https://stackoverflow.com/q/1?title=javascript+async+await+ordering',
+    'https://github.com/acme/api/pull/2?title=Add+unit+test+npm+install',
+    'https://kubernetes.io/docs/ingress?title=Ingress+Kubernetes+docs',
+    'https://github.com/acme/api/actions?title=GitHub+Actions+ci+pipeline',
+    'https://developer.mozilla.org/regex?title=regex+async+await+MDN'
   ];
   // Spaced like real reading, which is also what lets the previous context go
   // stale — the mechanism that breaks a tie between two saturated contexts.
@@ -212,7 +243,7 @@ test('a sensitive page leaves the theme untouched and logs nothing', async () =>
 
   const page = await ctx.newPage();
   for (const q of ['cancer+diagnosis+symptoms', 'chemotherapy+side+effects', 'oncology+second+opinion']) {
-    await visit(page, `http://www.google.com/search?q=${q}`);
+    await visit(page, `https://www.google.com/search?q=${q}`);
   }
   await page.close();
 
@@ -227,7 +258,7 @@ test('a sensitive page leaves the theme untouched and logs nothing', async () =>
 test('a banking host is ignored even though it is an ordinary web page', async () => {
   const before = await readStorage('activeTheme');
   const page = await ctx.newPage();
-  await visit(page, 'http://www.chase.com/accounts?title=Birthday+cake+party+balloons');
+  await visit(page, 'https://www.chase.com/accounts?title=Birthday+cake+party+balloons');
   await page.close();
   assert.equal((await readStorage('activeTheme')).category, before.category);
 });
@@ -254,7 +285,7 @@ test('no host permission is held until the user asks for ambient', async () => {
 
 test('no content script is injected into pages by default', async () => {
   const page = await ctx.newPage();
-  await visit(page, 'http://example.com/?title=Hello');
+  await visit(page, 'https://example.com/?title=Hello');
   assert.equal(await page.locator('#aura-ambient-root').count(), 0,
     'the ambient overlay is opt-in and must be absent');
   await page.close();
@@ -288,7 +319,7 @@ test('pinning holds the theme against contrary browsing', async () => {
 
   const page = await ctx.newPage();
   for (const q of ['birthday+cake+ideas', 'kids+party+games', 'party+favors+balloons', 'pinata+birthday']) {
-    await visit(page, `http://www.google.com/search?q=${q}`);
+    await visit(page, `https://www.google.com/search?q=${q}`);
   }
   await page.close();
 
@@ -326,9 +357,9 @@ test('erase all really empties storage', async () => {
 
 test('switching back to an already-open tab does not re-log it', async () => {
   const a = await ctx.newPage();
-  await visit(a, 'http://www.etsy.com/search?q=handmade+birthday+card&title=handmade+birthday+card');
+  await visit(a, 'https://www.etsy.com/search?q=handmade+birthday+card&title=handmade+birthday+card');
   const b = await ctx.newPage();
-  await visit(b, 'http://example.com/?title=Something+else');
+  await visit(b, 'https://example.com/?title=Something+else');
 
   const before = ((await readStorage('log')) || []).length;
   for (let i = 0; i < 4; i++) {           // alt-tab back and forth

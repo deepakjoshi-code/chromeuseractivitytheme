@@ -49,13 +49,28 @@ while no packet leaves the machine.
 This is the layer that was listed as "not covered" before the beta, and it
 immediately found three defects the mocked layers could not (below).
 
-> **Gotcha, if this ever fails only in CI.** Playwright's default headless browser is the
-> *headless shell*, which cannot load extensions at all — the service worker never registers
-> and the extension id comes back `null`, so every later assertion fails as a cascade. Both
-> the e2e suite and `tools/verify-package.mjs` therefore pass `channel: 'chromium'` to select
-> the full build (verified: the same run loads the extension under the full binary and fails
-> to under the headless shell). `CHROMIUM_PATH` overrides for environments that ship their
-> own binary; the two options are mutually exclusive, so only one is ever passed.
+Three environment traps are worth knowing about, because each one produced a failure that
+looked like a product bug and was not:
+
+> **1. The headless shell cannot load extensions.** Playwright's default headless browser is
+> the *headless shell*; the service worker never registers, the extension id comes back
+> `null`, and every later assertion fails as a cascade. Both the e2e suite and
+> `tools/verify-package.mjs` pass `channel: 'chromium'` to select the full build. Verified
+> directly: the same unpacked extension loads under the full binary and does not under the
+> headless shell. `CHROMIUM_PATH` overrides for environments shipping their own binary — the
+> two options are mutually exclusive, so only one is ever passed.
+>
+> **2. HSTS preload force-upgrades the hosts we care about.** `google.com`, `github.com` and
+> `etsy.com` are all on Chrome's preload list, so `http://` navigations to them become
+> `https://` before reaching the network stack. The stand-in server therefore speaks TLS with
+> a throwaway self-signed certificate, with `--ignore-certificate-errors` on the browser. A
+> plain-HTTP server fails with `ERR_SSL_PROTOCOL_ERROR` on exactly the hosts the suite needs
+> most.
+>
+> **3. Chrome inherits `http(s)_proxy` from the environment.** Left alone it will `CONNECT`
+> through that proxy instead of honouring `--host-resolver-rules`, which both breaks the suite
+> (`ERR_RESPONSE_HEADERS_TRUNCATED`) and attempts real egress — unacceptable in a test for an
+> extension that promises zero network. Both harnesses pass `--no-proxy-server`.
 
 ## The tests that exist because of a specific risk
 
