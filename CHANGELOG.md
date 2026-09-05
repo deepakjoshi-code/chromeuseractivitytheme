@@ -2,6 +2,29 @@
 
 All notable changes to Aura. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.9.2] — 2026-09-05
+
+### Added
+- **Page themes (beta).** The page itself is now tinted, behind the text, so a
+  search for a Hawaii trip actually looks tropical rather than getting a coloured
+  frame. **Google Search** is the first supported site.
+
+  This is a different mechanism from the ambient glow. The overlay sits *on top*
+  of a page and so can only wash over content; to make a page look genuinely
+  themed its own background has to be restyled underneath the text, which means
+  knowing something about the site. That knowledge lives as data in
+  `core/site-themes.js`, so adding the next site is one entry plus a host — but
+  it is a contract with someone else's markup and will need maintenance when a
+  site redesigns. That cost is the price of the effect looking real instead of
+  like a colour filter over the screen.
+
+  Deliberate limits: it sets background only — never colour, font, size or layout
+  — so a tint that turns out wrong is ugly rather than unreadable. It measures
+  the page's own background and follows the site's light or dark mode. It runs
+  only where an adapter exists, never guessing at an unknown site. Off by
+  default, permission scoped to the supported hosts, and switching it off reverts
+  the page immediately.
+
 ## [0.9.1] — 2026-09-05
 
 ### Fixed

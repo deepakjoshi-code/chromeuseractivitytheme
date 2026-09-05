@@ -23,7 +23,9 @@ export const MSG = {
   /** page -> worker: nuke everything (PRD B11) */
   ERASE_ALL: 'aura/erase-all',
   /** worker -> content script: ambient overlay payload (PRD A7) */
-  AMBIENT_UPDATE: 'aura/ambient-update'
+  AMBIENT_UPDATE: 'aura/ambient-update',
+  /** worker -> content script: per-site page tint payload */
+  PAGE_THEME_UPDATE: 'aura/page-theme-update'
 };
 
 /** Storage keys. Kept here so the erase-all path cannot miss one. */

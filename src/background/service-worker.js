@@ -15,6 +15,7 @@ import * as engine from '../core/engine.js';
 import * as store from '../core/storage.js';
 import { getTheme, resolveTheme } from '../core/themes.js';
 import { sanitizeUrl, originsForHosts } from '../core/privacy.js';
+import { adapterFor, adapterHosts, buildPageCss } from '../core/site-themes.js';
 import { NEUTRAL } from '../core/taxonomy.js';
 
 /*
@@ -69,6 +70,7 @@ function broadcast(payload) {
 /* --------------------------------------------------------------- ambient */
 
 const AMBIENT_SCRIPT_ID = 'aura-ambient';
+const PAGE_THEME_SCRIPT_ID = 'aura-page-theme';
 
 /**
  * The ambient overlay is registered at RUNTIME rather than declared in the
@@ -160,6 +162,107 @@ async function injectIntoOpenTabs(settings) {
   }
 }
 
+/* ---------------------------------------------------- per-site page tint */
+
+/**
+ * Register the page-tint script for the sites we have adapters for.
+ *
+ * Scoped to adapter hosts only — this feature restyles someone else's markup,
+ * so it must never run anywhere it has not been written and checked for.
+ */
+async function syncPageThemeRegistration(settings) {
+  const origins = originsForHosts(adapterHosts());
+  const shouldRegister = Boolean(settings.enabled && settings.pageThemes);
+
+  let granted = false;
+  try {
+    granted = await chrome.permissions.contains({ origins });
+  } catch {
+    granted = false;
+  }
+
+  let registered = [];
+  try {
+    registered = await chrome.scripting.getRegisteredContentScripts({ ids: [PAGE_THEME_SCRIPT_ID] });
+  } catch {
+    registered = [];
+  }
+  const isRegistered = registered.length > 0;
+
+  try {
+    if (shouldRegister && granted && !isRegistered) {
+      await chrome.scripting.registerContentScripts([{
+        id: PAGE_THEME_SCRIPT_ID,
+        matches: origins,
+        js: ['content/site-theme.js'],
+        runAt: 'document_start',   // before first paint, so there is no flash
+        allFrames: false
+      }]);
+    } else if (isRegistered && (!shouldRegister || !granted)) {
+      await chrome.scripting.unregisterContentScripts({ ids: [PAGE_THEME_SCRIPT_ID] });
+    }
+  } catch {
+    // Registration races are safe to ignore; the next settings change re-syncs.
+  }
+
+  if (shouldRegister && granted) await injectPageThemeIntoOpenTabs(settings);
+}
+
+/**
+ * Both palettes are sent, and the content script picks. Only the page knows
+ * whether the site is currently rendering light or dark, and tinting a dark page
+ * with a light palette is the one outcome worse than no theme at all.
+ */
+async function pageThemePayload(host, path) {
+  const settings = await store.getSettings(chrome);
+  const adapter = adapterFor(host, path);
+  if (!adapter || !engine.shouldThemePage(settings, host, path)) {
+    return { enabled: false };
+  }
+
+  const active = await store.getActiveTheme(chrome);
+  const theme = getTheme(active.category);
+  return {
+    enabled: true,
+    cssLight: buildPageCss(adapter, theme.light.gradient),
+    cssDark: buildPageCss(adapter, theme.dark.gradient)
+  };
+}
+
+async function updatePageThemeForTab(tabId, url) {
+  const sanitized = sanitizeUrl(url);
+  if (!sanitized) return;
+  try {
+    await chrome.tabs.sendMessage(tabId, {
+      type: MSG.PAGE_THEME_UPDATE,
+      payload: await pageThemePayload(sanitized.host, sanitized.path)
+    });
+  } catch {
+    // No content script on this tab.
+  }
+}
+
+async function injectPageThemeIntoOpenTabs(settings) {
+  const origins = originsForHosts(adapterHosts());
+  let tabs = [];
+  try {
+    tabs = await chrome.tabs.query({ url: origins });
+  } catch {
+    return;
+  }
+  for (const tab of tabs) {
+    if (typeof tab.id !== 'number' || tab.incognito) continue;
+    const sanitized = sanitizeUrl(tab.url);
+    if (!sanitized || !engine.shouldThemePage(settings, sanitized.host, sanitized.path)) continue;
+    try {
+      await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['content/site-theme.js'] });
+      await updatePageThemeForTab(tab.id, tab.url);
+    } catch {
+      // Not injectable; the next navigation picks it up.
+    }
+  }
+}
+
 /** The payload the content script needs: colours resolved, no core imports. */
 async function ambientPayload(host) {
   const settings = await store.getSettings(chrome);
@@ -201,6 +304,7 @@ async function processTab(tab) {
   }
   if (typeof tab.id === 'number') {
     await updateAmbientForTab(tab.id, tab.url);
+    await updatePageThemeForTab(tab.id, tab.url);
   }
 }
 
@@ -285,6 +389,7 @@ async function handleMessage(message, sender) {
        * has actually been granted (see options.js).
        */
       await syncAmbientRegistration(settings);
+      await syncPageThemeRegistration(settings);
       const state = await engine.getFullState(chrome, t);
       broadcast(state);
       return { settings, state };
@@ -292,6 +397,11 @@ async function handleMessage(message, sender) {
 
     case 'aura/get-ambient':
       return { payload: await ambientPayload(senderHost) };
+
+    case 'aura/get-page-theme': {
+      const s = sanitizeUrl(sender && sender.tab && sender.tab.url);
+      return { payload: s ? await pageThemePayload(s.host, s.path) : { enabled: false } };
+    }
 
     case MSG.GET_LOG:
       return { log: await store.getLog(chrome) };
@@ -329,6 +439,7 @@ chrome.runtime.onInstalled.addListener(async () => {
   const active = await store.getActiveTheme(chrome);
   await paintBadge(active.category);
   await syncAmbientRegistration(settings);
+  await syncPageThemeRegistration(settings);
 });
 
 /*
@@ -338,7 +449,9 @@ chrome.runtime.onInstalled.addListener(async () => {
  */
 if (chrome.permissions && chrome.permissions.onRemoved) {
   chrome.permissions.onRemoved.addListener(async () => {
-    await syncAmbientRegistration(await store.getSettings(chrome));
+    const settings = await store.getSettings(chrome);
+    await syncAmbientRegistration(settings);
+    await syncPageThemeRegistration(settings);
   });
 }
 
@@ -353,7 +466,9 @@ if (chrome.permissions && chrome.permissions.onRemoved) {
  */
 if (chrome.permissions && chrome.permissions.onAdded) {
   chrome.permissions.onAdded.addListener(async () => {
-    await syncAmbientRegistration(await store.getSettings(chrome));
+    const settings = await store.getSettings(chrome);
+    await syncAmbientRegistration(settings);
+    await syncPageThemeRegistration(settings);
   });
 }
 
