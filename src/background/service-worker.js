@@ -14,7 +14,7 @@ import { MSG } from '../core/messages.js';
 import * as engine from '../core/engine.js';
 import * as store from '../core/storage.js';
 import { getTheme, resolveTheme } from '../core/themes.js';
-import { sanitizeUrl } from '../core/privacy.js';
+import { sanitizeUrl, originsForHosts } from '../core/privacy.js';
 import { NEUTRAL } from '../core/taxonomy.js';
 
 /*
@@ -79,11 +79,16 @@ const AMBIENT_SCRIPT_ID = 'aura-ambient';
  * grants the optional permission.
  */
 async function syncAmbientRegistration(settings) {
-  const shouldRegister = Boolean(settings.enabled && settings.ambient);
+  const sites = settings.ambientSites || [];
+  const origins = originsForHosts(sites);
+  const shouldRegister = Boolean(settings.enabled && settings.ambient && origins.length > 0);
 
+  // Only the listed sites are ever requested or registered, so the access we
+  // hold matches the access the options page promises.
   let granted = false;
   try {
-    granted = await chrome.permissions.contains({ origins: ['http://*/*', 'https://*/*'] });
+    granted = origins.length > 0 &&
+      await chrome.permissions.contains({ origins });
   } catch {
     granted = false;
   }
@@ -100,14 +105,17 @@ async function syncAmbientRegistration(settings) {
     if (shouldRegister && granted && !isRegistered) {
       await chrome.scripting.registerContentScripts([{
         id: AMBIENT_SCRIPT_ID,
-        matches: ['http://*/*', 'https://*/*'],
+        matches: origins,
         js: ['content/ambient.js'],
         css: ['content/ambient.css'],
         runAt: 'document_idle',
         allFrames: false
       }]);
-    } else if ((!shouldRegister || !granted) && isRegistered) {
+    } else if (isRegistered && (!shouldRegister || !granted)) {
       await chrome.scripting.unregisterContentScripts({ ids: [AMBIENT_SCRIPT_ID] });
+    } else if (isRegistered && shouldRegister && granted) {
+      // The allow-list may have changed since registration; re-point it.
+      await chrome.scripting.updateContentScripts([{ id: AMBIENT_SCRIPT_ID, matches: origins }]);
     }
   } catch {
     // Registration races (two events at once) are safe to ignore; the next
@@ -127,9 +135,12 @@ async function syncAmbientRegistration(settings) {
  * already present all reject, and none of them are problems.
  */
 async function injectIntoOpenTabs(settings) {
+  const origins = originsForHosts(settings.ambientSites || []);
+  if (origins.length === 0) return;
+
   let tabs = [];
   try {
-    tabs = await chrome.tabs.query({ url: ['http://*/*', 'https://*/*'] });
+    tabs = await chrome.tabs.query({ url: origins });
   } catch {
     return;
   }

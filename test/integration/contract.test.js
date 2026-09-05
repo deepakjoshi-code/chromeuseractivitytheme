@@ -132,7 +132,9 @@ test('the only external URL in the source is the search-box navigation', () => {
     for (const match of source.matchAll(/https?:\/\/[^\s'"`)]+/g)) {
       const url = match[0];
       if (allowed.has(url)) continue;
-      if (url.startsWith('http://*/') || url.startsWith('https://*/')) continue;  // permission patterns
+      // Chrome match patterns (permission scopes and content-script matches) are
+      // not network destinations. Any wildcard in the host position marks one.
+      if (/^https?:\/\/\*/.test(url)) continue;
       if (url.startsWith('http://www.w3.org/')) continue;                          // SVG namespace
       found.push(`${file.replace(ROOT, '.')}: ${url}`);
     }

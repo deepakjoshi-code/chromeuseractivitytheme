@@ -9,9 +9,7 @@
 import { MSG } from '../core/messages.js';
 import { THEMES, THEME_KEYS } from '../core/themes.js';
 import { NEUTRAL } from '../core/taxonomy.js';
-
-/** Optional host access, requested only when the user turns ambient glow on. */
-const HOST_ORIGINS = ['http://*/*', 'https://*/*'];
+import { originsForHosts } from '../core/privacy.js';
 
 const els = {
   intensity: document.getElementById('intensity'),
@@ -178,17 +176,26 @@ els.ambient.addEventListener('change', async () => {
    * registered and no glow ever appeared, with no error surfaced to the user.
    */
   if (els.ambient.checked) {
-    let granted = false;
-    try {
-      granted = await chrome.permissions.request({ origins: HOST_ORIGINS });
-    } catch {
-      granted = false;
+    // Ask for the listed sites ONLY, never for all sites.
+    //
+    // Requesting the blanket http and https wildcards makes Chrome say "Read
+    // and change all your data on all websites" — the most alarming string it
+    // has, and flatly at odds with a product whose pitch is restraint and whose
+    // own copy promises "only ever on sites you list here". Requesting the
+    // specific origins makes the prompt name those sites instead, so the
+    // permission boundary matches the promise rather than relying on our own
+    // code to stay narrower than our access.
+    const sites = settings.ambientSites || [];
+    if (sites.length === 0) {
+      els.ambient.checked = false;
+      toast('Add at least one site below, then turn ambient glow on');
+      return;
     }
-    if (!granted) {
+    if (!(await requestSites(sites))) {
       // Never store `ambient: true` we cannot honour — that is the state that
       // produced a checkbox claiming a feature was on while it was inert.
       els.ambient.checked = false;
-      toast('Ambient glow needs access to the sites you list');
+      toast('Ambient glow needs access to the sites you listed');
       return;
     }
   }
@@ -196,6 +203,17 @@ els.ambient.addEventListener('change', async () => {
   await patch({ ambient: els.ambient.checked },
     els.ambient.checked ? 'Ambient glow on' : 'Ambient glow off');
 });
+
+/** Request host access for exactly these sites. Returns whether it was granted. */
+async function requestSites(hosts) {
+  const origins = originsForHosts(hosts);
+  if (origins.length === 0) return false;
+  try {
+    return await chrome.permissions.request({ origins });
+  } catch {
+    return false;
+  }
+}
 
 for (const [element, key, label] of [
   [els.ambientSites, 'ambientSites', 'Allowed sites updated'],
@@ -205,6 +223,14 @@ for (const [element, key, label] of [
     const list = parseHostList(element.value);
     await patch({ [key]: list }, label);
     element.value = list.join('\n');
+
+    // A site added after ambient was switched on still needs its own grant,
+    // otherwise it would silently do nothing — the same failure as before.
+    if (key === 'ambientSites' && settings.ambient && list.length > 0) {
+      if (!(await requestSites(list))) {
+        toast('Ambient glow needs access to the new site');
+      }
+    }
   });
 }
 
@@ -248,9 +274,11 @@ els.erase.addEventListener('click', async () => {
  */
 async function reconcileAmbientPermission() {
   if (!settings || !settings.ambient) return;
+  const origins = originsForHosts(settings.ambientSites || []);
+  if (origins.length === 0) return;
   let granted = false;
   try {
-    granted = await chrome.permissions.contains({ origins: HOST_ORIGINS });
+    granted = await chrome.permissions.contains({ origins });
   } catch {
     granted = false;
   }

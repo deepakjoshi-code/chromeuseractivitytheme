@@ -6,7 +6,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   isIgnoredUrl, isSensitiveHost, isSensitiveText, isSensitiveSignal,
-  extractSearchQuery, sanitizeUrl, redactForLog, isBlocklisted, hostInList
+  extractSearchQuery, sanitizeUrl, redactForLog, isBlocklisted, hostInList,
+  originsForHosts
 } from '../../src/core/privacy.js';
 
 /* ------------------------------------------------------------ ignored URLs */
@@ -176,4 +177,28 @@ test('blocklist matching includes subdomains but respects the boundary', () => {
 
 test('host lists tolerate messy user input', () => {
   assert.equal(hostInList('shop.example.com', ['  Example.COM  ', '']), true);
+});
+
+/* ------------------------------------------------- permission scoping ---- */
+
+test('originsForHosts requests the listed sites only, never all sites', () => {
+  const origins = originsForHosts(['github.com', 'wikipedia.org']);
+  assert.deepEqual(origins, [
+    'https://*.github.com/*', 'http://*.github.com/*',
+    'https://*.wikipedia.org/*', 'http://*.wikipedia.org/*'
+  ]);
+  for (const origin of origins) {
+    assert.ok(!/^https?:\/\/\*\//.test(origin),
+      'a blanket wildcard would make Chrome say "all your data on all websites"');
+  }
+});
+
+test('originsForHosts normalises messy input and drops empties', () => {
+  assert.deepEqual(originsForHosts(['  WWW.Example.COM ', '', null]),
+    ['https://*.example.com/*', 'http://*.example.com/*']);
+});
+
+test('originsForHosts returns nothing for an empty list', () => {
+  assert.deepEqual(originsForHosts([]), []);
+  assert.deepEqual(originsForHosts(undefined), []);
 });

@@ -135,3 +135,23 @@ export function hostInList(host, list) {
 export function isBlocklisted(host, blocklist) {
   return hostInList(host, blocklist);
 }
+
+/**
+ * Chrome match patterns for a list of hosts.
+ *
+ * `*.example.com` matches the bare domain and its subdomains, which is the same
+ * suffix semantics `hostInList` uses — so what the user typed, what Chrome
+ * grants, and what the engine enforces all describe the same set.
+ */
+export function originsForHosts(hosts) {
+  const origins = [];
+  for (const entry of hosts || []) {
+    // Guard before stringifying: String(null) is "null", which would produce a
+    // bogus "*.null" origin and be sent to chrome.permissions.request verbatim.
+    if (typeof entry !== 'string') continue;
+    const host = normalizeHost(entry.trim());
+    if (!host) continue;
+    origins.push(`https://*.${host}/*`, `http://*.${host}/*`);
+  }
+  return origins;
+}
