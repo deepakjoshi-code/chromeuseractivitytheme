@@ -59,6 +59,15 @@ This product reads what you browse. That is only acceptable if the contract is a
 - **No host permissions at install.** Access is requested only if you turn on ambient glow.
 - **One-click erase** of everything.
 
+## Status: 0.9.0 beta
+
+Feature-complete against the v1 PRD, verified end-to-end in real Chrome, and packaged.
+Pre-1.0 because classification quality is still being tuned against real browsing — it will
+show you a neutral page rather than a wrong one, and that trade is set conservatively for now.
+
+See [`CHANGELOG.md`](CHANGELOG.md) and [`store/LISTING.md`](store/LISTING.md) for the
+Chrome Web Store submission package.
+
 ## Install (unpacked)
 
 ```bash
@@ -72,14 +81,29 @@ git clone <this repo> && cd chromeuseractivitytheme
 
 No build step. No bundler. No dependencies. `src/` is the extension.
 
+## Build a release
+
+```bash
+npm run build     # validates, then writes dist/aura-<version>.zip
+npm run verify    # builds, then loads THAT zip in real Chrome and smoke-tests it
+```
+
+`build` refuses to package anything that would fail review: a version mismatch, a missing
+referenced file, install-time host permissions, a weakened CSP, or a network call in any
+source file.
+
 ## Develop
 
 ```bash
-npm test              # 152 assertions, unit + integration, zero dependencies
-npm run test:unit
-npm run test:integration
+npm test              # 158 assertions, unit + integration, zero dependencies
+npm run test:e2e      # 17 assertions against real Chrome with the extension loaded
+npm run test:all      # both
 npm run test:visual   # renders every page in Chromium (needs playwright)
 ```
+
+The end-to-end suite loads the extension into real Chrome and browses, with
+`--host-resolver-rules` mapping every hostname to a local server — so it sees genuine hosts
+like `github.com` while no packet leaves the machine.
 
 ### Adding a theme
 
@@ -115,6 +139,9 @@ one sentence, and a bundled model cannot do that. See
 | [`docs/PRD-REVIEW.md`](docs/PRD-REVIEW.md) | Gap review of the PRD: 11 gaps, 10 closed, 1 accepted |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Module contracts, MV3 lifecycle, permission justification |
 | [`docs/TESTING.md`](docs/TESTING.md) | Test strategy, and the bugs testing actually caught |
+| [`PRIVACY.md`](PRIVACY.md) | The privacy policy, in plain terms |
+| [`CHANGELOG.md`](CHANGELOG.md) | Release notes |
+| [`store/LISTING.md`](store/LISTING.md) | Chrome Web Store listing copy, permission justifications, submission steps |
 
 ## Layout
 
@@ -134,10 +161,6 @@ src/
   newtab/ popup/ options/ the UI surfaces
   content/                the opt-in ambient overlay
 ```
-
-## Status
-
-v1.0. Not published to the Chrome Web Store.
 
 ## License
 

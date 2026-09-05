@@ -72,7 +72,8 @@ export async function getActiveTheme(chromeNs) {
   });
 }
 
-export async function setActiveTheme(chromeNs, active) {
+export async function setActiveTheme(chromeNs, active, epoch) {
+  if (!(await epochUnchanged(chromeNs, epoch))) return getActiveTheme(chromeNs);
   return writeLocal(chromeNs, KEYS.ACTIVE, active);
 }
 
@@ -105,6 +106,23 @@ export async function getActivePin(chromeNs, now) {
   return pin;
 }
 
+/* --------------------------------------------------------------- erase epoch */
+
+/**
+ * Bumped by eraseAll. A write that began before an erase carries the old epoch
+ * and is dropped rather than resurrecting data the user asked to destroy — a
+ * real race, caught by the end-to-end suite: a tab event still in flight
+ * appended to the log immediately after "Erase everything".
+ */
+export async function getEpoch(chromeNs) {
+  return readLocal(chromeNs, KEYS.EPOCH, 0);
+}
+
+async function epochUnchanged(chromeNs, expected) {
+  if (expected === undefined || expected === null) return true;
+  return (await getEpoch(chromeNs)) === expected;
+}
+
 /* -------------------------------------------------------------- activity log */
 
 export async function getLog(chromeNs) {
@@ -113,8 +131,9 @@ export async function getLog(chromeNs) {
 }
 
 /** Newest first, hard-capped at LOG_LIMIT (PRD P7). */
-export async function appendLog(chromeNs, entry) {
+export async function appendLog(chromeNs, entry, epoch) {
   const log = await getLog(chromeNs);
+  if (!(await epochUnchanged(chromeNs, epoch))) return log;
   const next = [entry, ...log].slice(0, LOG_LIMIT);
   await writeLocal(chromeNs, KEYS.LOG, next);
   return next;
@@ -166,8 +185,11 @@ export async function setContextState(chromeNs, state) {
 
 export async function eraseAll(chromeNs) {
   const storage = api(chromeNs);
+  const epoch = await getEpoch(chromeNs);
   await storage.local.clear();
   if (storage.session) await storage.session.clear();
+  // Invalidate any write that was already in flight when the user hit erase.
+  await writeLocal(chromeNs, KEYS.EPOCH, epoch + 1);
   await writeLocal(chromeNs, KEYS.SETTINGS, { ...DEFAULT_SETTINGS });
   return { ...DEFAULT_SETTINGS };
 }

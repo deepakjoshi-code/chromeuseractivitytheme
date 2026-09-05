@@ -1,13 +1,16 @@
 # Testing — Aura
 
-**Runner:** `node:test`, zero dependencies (except Playwright for the optional visual pass).
+**Runner:** `node:test`, zero dependencies (Playwright only for the browser passes).
 **Command:** `npm test`
 
 ```
-npm test              # everything: 152 assertions across unit + integration
+npm test              # 158 assertions, unit + integration, no dependencies
 npm run test:unit
 npm run test:integration
+npm run test:e2e      # 17 assertions against REAL Chrome, extension loaded
+npm run test:all      # both
 npm run test:visual   # renders every page in Chromium and screenshots it
+npm run verify        # build the .zip, then load THAT in Chrome and smoke-test it
 ```
 
 ## Why there is no test framework
@@ -33,6 +36,18 @@ add a supply chain to a product whose entire pitch is "this thing touches nothin
 | Lifecycle | `integration/lifecycle.test.js` | MV3 worker death, lazy decay, browser restart |
 | Contract | `integration/contract.test.js` | manifest, permissions, CSP, zero-network, extensibility |
 | Visual | `visual/render.mjs` | every page actually renders, in light and dark |
+| **End-to-end** | `e2e/extension.test.mjs` | **real Chrome**: worker registration, tab events, New Tab override, message protocol, permissions |
+| Package | `tools/verify-package.mjs` | the built `.zip` — not the source tree — loads and works |
+
+## The end-to-end layer
+
+`npm run test:e2e` launches real Chrome with the extension loaded unpacked, then
+browses. The trick that makes it work offline: `--host-resolver-rules` maps every
+hostname to a local server, so the extension sees genuine hosts like `github.com`
+while no packet leaves the machine.
+
+This is the layer that was listed as "not covered" before the beta, and it
+immediately found three defects the mocked layers could not (below).
 
 ## The tests that exist because of a specific risk
 
@@ -74,12 +89,35 @@ Recorded because "what did testing find" is the honest measure of whether it was
 5. **The New Tab motif tiled into wallpaper** and the reason line truncated mid-sentence.
    Both caught by looking at the screenshots.
 
+### Found only by real Chrome (beta hardening)
+
+6. **Tab activation re-scored and re-logged the same page.** Chrome fires tab events on
+   activation as well as navigation, so alt-tabbing to an already-open tab re-delivered a
+   signal the engine had already counted — inflating that context's evidence and filling the
+   activity log with duplicates. Every mocked test drove signals in one direction and never
+   simulated a tab switch, so none of them could see it. Fixed with per-tab de-duplication
+   inside a 30-second window; `switching back to an already-open tab does not re-log it` pins
+   it, in the browser where it happened.
+7. **An in-flight signal could write to the log after "Erase everything".** A tab event that
+   started before the erase completed its write afterwards, leaving a record the user had
+   explicitly destroyed. Fixed with an erase epoch: writes carry the epoch they began under
+   and are dropped if an erase happened underneath them.
+8. **A decisive context switch could take most of a minute.** With two contexts both at the
+   evidence ceiling, the ratio margin is a tie that only the staleness waiver can break — and
+   it was set to 45 seconds. Switching from holiday-planning to a GitHub session left the
+   browser on the wrong theme far too long. Only visible with real timing; the mocked tests
+   used synthetic clocks and happened to space signals widely. Staleness cut to 15 seconds,
+   with the anti-strobe test pinning the other side of the trade.
+
 ## Not covered
 
-- No real Chrome extension host is exercised: `chrome.tabs` event wiring, `chrome.action`
-  badge painting, `permissions.request` and `scripting.registerContentScripts` are only
-  reachable in a real browser profile. They live in `background/service-worker.js`, which is
-  kept deliberately thin and logic-free for exactly this reason.
-- The ambient content script's DOM behaviour on real sites is unverified.
-- Classifier quality is asserted on curated cases, not measured on a corpus. PRD §9's
-  correct-context target is a moderated-study metric, not a unit test.
+- **`chrome.action` badge painting** is not asserted. Extension action badges are not
+  readable from the page context, so verifying the colour would need a screenshot of browser
+  chrome that headless Chrome does not expose.
+- **The ambient overlay's behaviour on real sites** is unverified. The e2e suite asserts it is
+  *absent* by default, which is the security-relevant half; the appearance half needs the
+  optional host permission, and permission prompts cannot be driven headlessly.
+- **Classifier quality** is asserted on curated cases, not measured on a corpus. PRD §9's
+  75% correct-context target is a moderated-study metric, and the honest reason for shipping
+  0.9.0 rather than 1.0.
+- **Firefox** is not built or tested.

@@ -147,7 +147,8 @@ async function processTab(tab) {
   if (!tab || !tab.url) return;
   if (tab.incognito) return;   // belt and braces; manifest already forbids it (PRD P3)
 
-  const result = await engine.handleSignal(chrome, { url: tab.url, title: tab.title }, now());
+  const result = await engine.handleSignal(
+    chrome, { url: tab.url, title: tab.title, tabId: tab.id }, now());
 
   if (result.outcome === engine.OUTCOME.CHANGED) {
     await paintBadge(result.category);

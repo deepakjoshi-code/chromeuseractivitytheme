@@ -21,9 +21,35 @@ export const OUTCOME = {
   BLOCKLISTED: 'blocklisted',
   SENSITIVE: 'sensitive',
   PINNED: 'pinned',
+  DUPLICATE: 'duplicate',
   NO_CHANGE: 'no-change',
   CHANGED: 'changed'
 };
+
+/**
+ * How long the same page in the same tab is ignored after being scored.
+ *
+ * Chrome fires tab events on activation as well as navigation, so simply
+ * switching back to an already-open tab re-delivers a signal the engine has
+ * already counted. Without this, a tab the user alt-tabs to repeatedly wins the
+ * context purely by being switched to, and the activity log fills with
+ * duplicates of one page. Found by the end-to-end suite against real Chrome.
+ */
+export const DEDUPE_MS = 30 * 1000;
+
+/** Identity of a signal for de-duplication purposes. */
+function fingerprint(signal) {
+  return `${signal.host}|${signal.query || ''}|${signal.title || ''}`;
+}
+
+/** Drop de-dupe entries older than the window so session state stays bounded. */
+function pruneRecent(recent, now) {
+  const next = {};
+  for (const [tabId, entry] of Object.entries(recent || {})) {
+    if (now - entry.at < DEDUPE_MS) next[tabId] = entry;
+  }
+  return next;
+}
 
 async function loadContextState(chromeNs, now) {
   const stored = await store.getContextState(chromeNs);
@@ -35,7 +61,7 @@ async function loadContextState(chromeNs, now) {
  * Process one browsing signal.
  *
  * @param {object} chromeNs
- * @param {{url:string, title?:string}} raw
+ * @param {{url:string, title?:string, tabId?:number|string}} raw
  * @param {number} now epoch ms
  * @returns {Promise<{outcome:string, category?:string, confidence?:number, reasons?:Array, reason?:string}>}
  */
@@ -70,20 +96,33 @@ export async function handleSignal(chromeNs, raw, now) {
   const pin = await store.getActivePin(chromeNs, now);
   if (pin) return { outcome: OUTCOME.PINNED, category: pin.category };
 
+  let state = await loadContextState(chromeNs, now);
+
+  // Same page, same tab, seen recently: a tab switch, not new activity.
+  const tabKey = String(raw && raw.tabId !== undefined ? raw.tabId : 'unknown');
+  const fp = fingerprint(signal);
+  const recent = pruneRecent(state.recent, now);
+  const seen = recent[tabKey];
+  if (seen && seen.fp === fp) {
+    await store.setContextState(chromeNs, { ...state, recent });
+    return { outcome: OUTCOME.DUPLICATE };
+  }
+  recent[tabKey] = { fp, at: now };
+
+  const epoch = await store.getEpoch(chromeNs);
   const rejections = await store.getRejections(chromeNs);
   const classification = classify(signal, {
     mutedCategories: settings.mutedCategories,
     domainRejections: rejections
   });
 
-  let state = await loadContextState(chromeNs, now);
   state = ingest(state, classification, now, DEFAULT_CONFIG);
   const decision = decide(state, now, DEFAULT_CONFIG);
   state = commit(state, decision, now);
-  await store.setContextState(chromeNs, state);
+  await store.setContextState(chromeNs, { ...state, recent });
 
   if (classification.category !== NEUTRAL && classification.confidence > 0) {
-    await store.appendLog(chromeNs, redactForLog(signal, classification, now));
+    await store.appendLog(chromeNs, redactForLog(signal, classification, now), epoch);
   }
 
   if (!decision.changed) {
@@ -103,7 +142,7 @@ export async function handleSignal(chromeNs, raw, now) {
     reasons: decision.category === classification.category ? classification.reasons : [],
     at: now
   };
-  await store.setActiveTheme(chromeNs, active);
+  await store.setActiveTheme(chromeNs, active, epoch);
 
   return {
     outcome: OUTCOME.CHANGED,
@@ -181,7 +220,10 @@ export async function rejectCurrent(chromeNs, host, now) {
   const state = await loadContextState(chromeNs, now);
   if (state.scores && state.scores[category]) delete state.scores[category];
   const cleared = { ...state, active: NEUTRAL, activeSince: now, lastChangeAt: now,
-    leader: null, leaderSince: now, leaderSignals: 0 };
+    leader: null, leaderSince: now, leaderSignals: 0,
+    // Forget what we have seen, so the very next signal is re-evaluated rather
+    // than skipped as a duplicate of the thing the user just rejected.
+    recent: {} };
   await store.setContextState(chromeNs, cleared);
 
   await store.setActiveTheme(chromeNs, {

@@ -12,7 +12,7 @@ import * as store from '../../src/core/storage.js';
 import { NEUTRAL } from '../../src/core/taxonomy.js';
 
 const MINUTE = 60 * 1000;
-const search = (q) => ({ url: `https://www.google.com/search?q=${encodeURIComponent(q)}`, title: `${q} - Google Search` });
+const search = (q) => ({ url: `https://www.google.com/search?q=${encodeURIComponent(q)}`, title: `${q} - Google Search`, tabId: 1 });
 
 /** Replay a browsing session as [signal, dtMs] pairs. */
 async function browse(ns, steps, start = 0) {
@@ -92,13 +92,18 @@ test("Dev's work session is never interrupted by a wrongly-detected holiday", as
 
 test('Dev rejects a misfire once and it does not come back on that site', async () => {
   const ns = createChromeMock();
-  const page = { url: 'https://internal.example.com/wiki', title: 'Bali offsite: beach resort, snorkeling, luau' };
+  const wiki = [
+    { url: 'https://internal.example.com/wiki/offsite', title: 'Bali offsite: beach resort and luau' },
+    { url: 'https://internal.example.com/wiki/travel', title: 'Maui snorkeling trip notes' },
+    { url: 'https://internal.example.com/wiki/budget', title: 'Fiji overwater bungalow costs' },
+    { url: 'https://internal.example.com/wiki/agenda', title: 'Tropical island vacation agenda' }
+  ];
 
-  await browse(ns, [[page, 5000], [page, 9000], [page, 9000]]);
+  await browse(ns, wiki.map((page) => [page, 9000]));
   assert.equal((await store.getActiveTheme(ns)).category, 'tropical');
 
-  await engine.rejectCurrent(ns, 'internal.example.com', 40000);
-  await browse(ns, [[page, 9000], [page, 9000], [page, 9000]], 40000);
+  await engine.rejectCurrent(ns, 'internal.example.com', 60000);
+  await browse(ns, wiki.map((page) => [page, 9000]), 60000);
   assert.notEqual((await store.getActiveTheme(ns)).category, 'tropical');
 });
 

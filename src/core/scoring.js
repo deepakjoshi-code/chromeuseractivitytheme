@@ -10,8 +10,8 @@
  *   1. decay       — evidence has a 2-minute half-life
  *   2. floor       — never theme below 0.35 confidence
  *   3. margin      — a challenger must carry 35% more evidence than the incumbent
- *   4. staleness   — unless the incumbent has gone quiet, in which case the
- *                    margin is waived (the user has plainly moved on)
+ *   4. staleness   — unless the incumbent has gone quiet for 15s, in which case
+ *                    the margin is waived (the user has plainly moved on)
  *   5. dwell       — and the challenger must hold the lead for 1.5s or 2 signals
  *   6. rate limit  — at most one change per 10s
  *
@@ -32,8 +32,16 @@ export const DEFAULT_CONFIG = {
   confidenceFloor: 0.35,
   /** Challenger must carry this much more evidence than the incumbent (1.35x). */
   switchRatio: 0.35,
-  /** If the incumbent has had no reinforcement for this long, waive the ratio. */
-  stalenessMs: 45 * 1000,
+  /**
+   * If the incumbent context has had no reinforcement for this long, waive the
+   * ratio entirely. Lowered from 45s after real-browser testing: switching from
+   * holiday-planning to a GitHub session left the browser on the old theme for
+   * most of a minute, because both contexts sat at the evidence ceiling and the
+   * ratio can never be cleared by a tie. 15s of continuous new-context browsing
+   * is an unambiguous signal that the user has moved on, and interleaved
+   * browsing never reaches it (the anti-strobe test pins that).
+   */
+  stalenessMs: 15 * 1000,
   dwellMs: 1500,
   dwellSignals: 2,
   /*
