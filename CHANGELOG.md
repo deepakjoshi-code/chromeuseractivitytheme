@@ -2,6 +2,32 @@
 
 All notable changes to Aura. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.9.1] — 2026-09-05
+
+### Fixed
+- **Ambient page glow never activated.** Turning it on appeared to work — the
+  checkbox stayed ticked and the setting saved — but no glow ever appeared.
+  `chrome.permissions.request()` was being called from the service worker, which
+  has no user gesture, so Chrome rejected it; the rejection was caught and
+  ignored, host access was never granted, and the content script was never
+  registered. The request now happens in the options page from the checkbox's own
+  click, and `ambient: true` is only stored once access has actually been
+  granted — a declined prompt un-ticks the box and says so, instead of leaving a
+  setting that claims a feature is on while it is inert.
+- **Enabling ambient glow only affected pages loaded afterwards.** Registering a
+  content script does not touch tabs that are already open, so the feature looked
+  dead until every tab was manually reloaded. Eligible open tabs are now injected
+  immediately.
+- **Revoked host access left the setting stuck on.** If access is removed from
+  chrome://extensions, the options page now reconciles on load and turns the
+  setting off rather than showing a checkbox that cannot do anything.
+
+### Notes
+Found by hand during beta testing, not by any suite — `docs/TESTING.md` had
+already recorded permission prompts as undrivable headlessly, and that is exactly
+where the defect was. Regression tests now assert the request is made from a page
+and never from the worker.
+
 ## [0.9.0] — 2026-09-05 — first beta
 
 First public beta. Feature-complete against the v1 PRD; released pre-1.0 because

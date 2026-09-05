@@ -113,6 +113,40 @@ async function syncAmbientRegistration(settings) {
     // Registration races (two events at once) are safe to ignore; the next
     // settings change re-syncs.
   }
+
+  // Registering only affects pages loaded from now on. Without this, enabling
+  // ambient appears to do nothing until every open tab is manually reloaded.
+  if (shouldRegister && granted) await injectIntoOpenTabs(settings);
+}
+
+/**
+ * Inject the overlay into tabs that are already open and eligible.
+ *
+ * Failures here are expected and ignored: restricted pages (chrome://, the Web
+ * Store), tabs that navigated away mid-call, and tabs where the script is
+ * already present all reject, and none of them are problems.
+ */
+async function injectIntoOpenTabs(settings) {
+  let tabs = [];
+  try {
+    tabs = await chrome.tabs.query({ url: ['http://*/*', 'https://*/*'] });
+  } catch {
+    return;
+  }
+
+  for (const tab of tabs) {
+    if (typeof tab.id !== 'number' || tab.incognito) continue;
+    const sanitized = sanitizeUrl(tab.url);
+    if (!sanitized || !engine.shouldRunAmbient(settings, sanitized.host)) continue;
+
+    try {
+      await chrome.scripting.insertCSS({ target: { tabId: tab.id }, files: ['content/ambient.css'] });
+      await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['content/ambient.js'] });
+      await updateAmbientForTab(tab.id, tab.url);
+    } catch {
+      // Not injectable; the next navigation in that tab will pick it up.
+    }
+  }
 }
 
 /** The payload the content script needs: colours resolved, no core imports. */
@@ -233,12 +267,12 @@ async function handleMessage(message, sender) {
 
     case MSG.UPDATE_SETTINGS: {
       const settings = await store.updateSettings(chrome, message.patch);
-      if (message.patch && message.patch.ambient === true) {
-        // Host permission is requested only at the moment ambient is enabled
-        // (gap G-07) — never at install time.
-        try { await chrome.permissions.request({ origins: ['http://*/*', 'https://*/*'] }); }
-        catch { /* user declined; ambient simply stays inert */ }
-      }
+      /*
+       * The host permission is NOT requested here. chrome.permissions.request()
+       * needs a user gesture in a foreground page; from a worker it throws. The
+       * options page owns that call and only stores `ambient: true` once access
+       * has actually been granted (see options.js).
+       */
       await syncAmbientRegistration(settings);
       const state = await engine.getFullState(chrome, t);
       broadcast(state);

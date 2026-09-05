@@ -10,6 +10,9 @@ import { MSG } from '../core/messages.js';
 import { THEMES, THEME_KEYS } from '../core/themes.js';
 import { NEUTRAL } from '../core/taxonomy.js';
 
+/** Optional host access, requested only when the user turns ambient glow on. */
+const HOST_ORIGINS = ['http://*/*', 'https://*/*'];
+
 const els = {
   intensity: document.getElementById('intensity'),
   scheme: document.getElementById('scheme'),
@@ -164,7 +167,32 @@ els.scheme.addEventListener('change', () => patch({ scheme: els.scheme.value }))
 els.showReason.addEventListener('change', () => patch({ showReason: els.showReason.checked }));
 
 els.ambient.addEventListener('change', async () => {
-  // The worker requests the optional host permission when this flips on (gap G-07).
+  /*
+   * The host permission MUST be requested from here, not from the service
+   * worker.
+   *
+   * chrome.permissions.request() requires a user gesture and a foreground
+   * extension page. A service worker has neither, so requesting it there throws
+   * — and because the throw was caught and ignored, enabling ambient appeared to
+   * succeed while silently granting nothing. The content script then never
+   * registered and no glow ever appeared, with no error surfaced to the user.
+   */
+  if (els.ambient.checked) {
+    let granted = false;
+    try {
+      granted = await chrome.permissions.request({ origins: HOST_ORIGINS });
+    } catch {
+      granted = false;
+    }
+    if (!granted) {
+      // Never store `ambient: true` we cannot honour — that is the state that
+      // produced a checkbox claiming a feature was on while it was inert.
+      els.ambient.checked = false;
+      toast('Ambient glow needs access to the sites you list');
+      return;
+    }
+  }
+
   await patch({ ambient: els.ambient.checked },
     els.ambient.checked ? 'Ambient glow on' : 'Ambient glow off');
 });
@@ -213,6 +241,25 @@ els.erase.addEventListener('click', async () => {
 
 /* -------------------------------------------------------------------- init */
 
+/**
+ * The user can revoke host access from chrome://extensions at any time. If that
+ * happens, turn the stored setting off so the checkbox reflects reality rather
+ * than a feature that cannot run.
+ */
+async function reconcileAmbientPermission() {
+  if (!settings || !settings.ambient) return;
+  let granted = false;
+  try {
+    granted = await chrome.permissions.contains({ origins: HOST_ORIGINS });
+  } catch {
+    granted = false;
+  }
+  if (!granted) {
+    await patch({ ambient: false }, 'Ambient glow off — site access was revoked');
+    renderSettings();
+  }
+}
+
 (async function init() {
   const [stateResponse, logResponse] = await Promise.all([
     send(MSG.GET_STATE),
@@ -221,4 +268,5 @@ els.erase.addEventListener('click', async () => {
   settings = (stateResponse && stateResponse.state && stateResponse.state.settings) || {};
   renderSettings();
   renderLog(logResponse && logResponse.log);
+  await reconcileAmbientPermission();
 })();
