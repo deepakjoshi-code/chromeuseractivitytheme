@@ -47,21 +47,29 @@
     }
 
     var vars = payload.vars || {};
-    var a = vars['--aura-grad-1'] || 'transparent';
-    var b = vars['--aura-grad-2'] || 'transparent';
-    var c = vars['--aura-accent'] || 'transparent';
+    /*
+     * Build the glow from the ACCENT, not the gradient stops.
+     *
+     * The gradient stops are designed to sit close to a theme's own background,
+     * which makes them near-white in every light palette — composited at low
+     * opacity over a white page they render as #fafafb, i.e. invisible. The
+     * accent is the one colour in each palette that is genuinely saturated, so
+     * it is the only one that reads as light spilling in from the edges.
+     */
+    var accent = vars['--aura-accent'] || 'transparent';
+    var warm = vars['--aura-grad-2'] || accent;
 
     var node = ensure();
     node.style.background = [
-      'radial-gradient(46% 34% at 0% 0%, ' + a + ' 0%, transparent 62%)',
-      'radial-gradient(42% 32% at 100% 0%, ' + b + ' 0%, transparent 60%)',
-      'radial-gradient(58% 26% at 50% 100%, ' + c + ' 0%, transparent 66%)'
+      'radial-gradient(52% 40% at 0% 0%, ' + accent + ' 0%, transparent 68%)',
+      'radial-gradient(48% 38% at 100% 0%, ' + warm + ' 0%, transparent 66%)',
+      'radial-gradient(64% 30% at 50% 100%, ' + accent + ' 0%, transparent 70%)'
     ].join(',');
 
     // A frame of layout before opacity, so the first paint animates in.
     requestAnimationFrame(function () {
       if (!element) return;
-      var strength = payload.intensity === 'expressive' ? 0.22 : 0.13;
+      var strength = payload.intensity === 'expressive' ? 0.30 : 0.18;
       element.style.opacity = String(strength);
     });
   }

@@ -242,3 +242,31 @@ test('enabling ambient reaches tabs that are already open', () => {
     'registration only affects future page loads; open tabs need injecting');
   assert.match(code, /chrome\.scripting\.executeScript/);
 });
+
+/* --------------------------------- ambient activation (0.9.1 fixes) ------ */
+
+/**
+ * REGRESSION: the worker listened for permissions.onRemoved but not onAdded.
+ * The options page saves settings before requesting access, so the worker synced
+ * while the permission was still missing, declined to register, and never heard
+ * about the grant that followed. The user clicked Allow and got nothing.
+ */
+test('the worker re-syncs when host access is GRANTED, not only revoked', () => {
+  const code = stripComments(readFileSync(join(SRC, 'background/service-worker.js'), 'utf8'));
+  assert.match(code, /permissions\.onAdded/,
+    'a grant that nothing listens for cannot start the feature');
+  assert.match(code, /permissions\.onRemoved/);
+});
+
+/**
+ * REGRESSION: the overlay was built from the palette's gradient stops, which are
+ * designed to sit close to a theme's own background and are therefore near-white
+ * in every light palette. Composited over a white page they rendered as #fafafb
+ * — a plain white page, which is exactly what beta testing reported.
+ */
+test('the ambient overlay is built from the accent, not the pale gradient stops', () => {
+  const code = stripComments(readFileSync(join(SRC, 'content/ambient.js'), 'utf8'));
+  assert.match(code, /--aura-accent/, 'the accent is the only saturated colour in a palette');
+  assert.ok(!/--aura-grad-1/.test(code),
+    'grad-1 sits closest to the background and is invisible over a light page');
+});

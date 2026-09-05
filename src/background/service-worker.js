@@ -342,6 +342,21 @@ if (chrome.permissions && chrome.permissions.onRemoved) {
   });
 }
 
+/*
+ * Re-sync when access is GRANTED, not just when it is revoked.
+ *
+ * Without this the feature could never start: the options page saves the
+ * settings first, so the worker syncs while the permission is still missing and
+ * declines to register — and the grant that arrives a moment later told nobody.
+ * The user saw the prompt, clicked Allow, and got nothing. This also covers a
+ * grant made directly from chrome://extensions.
+ */
+if (chrome.permissions && chrome.permissions.onAdded) {
+  chrome.permissions.onAdded.addListener(async () => {
+    await syncAmbientRegistration(await store.getSettings(chrome));
+  });
+}
+
 chrome.runtime.onStartup.addListener(async () => {
   const active = await store.getActiveTheme(chrome);
   await paintBadge(active.category);

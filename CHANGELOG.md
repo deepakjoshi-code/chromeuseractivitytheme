@@ -30,6 +30,17 @@ All notable changes to Aura. Format follows [Keep a Changelog](https://keepachan
   content script is registered against those origins rather than all URLs.
   Adding a site later requests access for that site.
 
+- **Ambient glow never started after granting access.** The worker listened for
+  `permissions.onRemoved` but not `onAdded`. Because the options page saves the
+  setting before requesting access, the worker synced while the permission was
+  still missing, declined to register the content script, and never heard about
+  the grant that arrived a moment later. Clicking Allow produced nothing.
+- **The glow was invisible even when it did run.** The overlay was built from the
+  palette's gradient stops, which are designed to sit close to a theme's own
+  background and are therefore near-white in every light palette — composited
+  over a white page they rendered as `#fafafb`. It is now built from the accent,
+  the one genuinely saturated colour in each palette, at a higher opacity.
+
 ### Notes
 Found by hand during beta testing, not by any suite — `docs/TESTING.md` had
 already recorded permission prompts as undrivable headlessly, and that is exactly
