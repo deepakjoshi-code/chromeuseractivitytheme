@@ -93,11 +93,13 @@ test('intensity progressively increases expression (PRD §7.4)', () => {
   assert.equal(INTENSITY.subtle.motion, false, 'subtle must not animate');
 });
 
-test('ambient is only ever available at the expressive level', () => {
-  assert.equal(INTENSITY.expressive.ambient, true);
-  for (const level of ['off', 'subtle', 'balanced']) {
-    assert.equal(INTENSITY[level].ambient, false, `${level} must not enable ambient`);
+test('ambient is available at every level except Off', () => {
+  // Ambient is now the whole in-page experience, not a garnish on top of the
+  // most expressive setting, so gating it behind Expressive only hid it.
+  for (const level of ['subtle', 'balanced', 'expressive']) {
+    assert.equal(INTENSITY[level].ambient, true, `${level} should allow ambient`);
   }
+  assert.equal(INTENSITY.off.ambient, false, 'Off means off');
 });
 
 test('an unknown intensity falls back to balanced rather than throwing', () => {

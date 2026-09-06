@@ -250,8 +250,10 @@ test('ambient stays off unless every gate opens (PRD A7, gap G-07)', async () =>
   assert.equal(engine.shouldRunAmbient(base, 'example.com'), true);
   assert.equal(engine.shouldRunAmbient({ ...base, enabled: false }, 'example.com'), false);
   assert.equal(engine.shouldRunAmbient({ ...base, ambient: false }, 'example.com'), false);
-  assert.equal(engine.shouldRunAmbient({ ...base, intensity: 'balanced' }, 'example.com'), false,
-    'ambient requires the expressive intensity level');
+  assert.equal(engine.shouldRunAmbient({ ...base, intensity: 'balanced' }, 'example.com'), true,
+    'ambient is available below Expressive');
+  assert.equal(engine.shouldRunAmbient({ ...base, intensity: 'off' }, 'example.com'), false,
+    'Off means off');
   assert.equal(engine.shouldRunAmbient({ ...base, ambientSites: [] }, 'example.com'), false,
     'an empty allow-list must never mean "everywhere"');
   assert.equal(engine.shouldRunAmbient(base, 'other.com'), false);
@@ -282,4 +284,47 @@ test('the engine never throws on malformed input', async () => {
   for (const raw of [undefined, null, {}, { url: null }, { url: 123 }, { url: 'https://', title: null }]) {
     await assert.doesNotReject(() => engine.handleSignal(ns, raw, 1000));
   }
+});
+
+/* ------------------------------------ typed searches take over at once ---- */
+
+test('each new typed search re-themes immediately, one search per subject', async () => {
+  const ns = createChromeMock();
+  const journey = [
+    ['hawaii vacation packages', 'tropical'],
+    ['kids party ideas', 'celebration'],
+    ['kubernetes ingress tutorial', 'coding'],
+    ['maui snorkeling tours', 'tropical']
+  ];
+
+  let t = 0;
+  for (const [query, expected] of journey) {
+    t += 6000;
+    await engine.handleSignal(ns, { ...search(query), tabId: 1 }, t);
+    assert.equal((await store.getActiveTheme(ns)).category, expected,
+      `"${query}" should have themed as ${expected} on its own`);
+  }
+});
+
+test('a typed search displaces the previous subject rather than queueing behind it', async () => {
+  const ns = createChromeMock();
+  await engine.handleSignal(ns, { ...search('hawaii vacation maui'), tabId: 1 }, 5000);
+  assert.equal((await store.getActiveTheme(ns)).category, 'tropical');
+
+  // Without displacement, the evidence banked by Hawaii would outweigh a single
+  // new query and the browser would sit there looking broken.
+  await engine.handleSignal(ns, { ...search('birthday cake balloons'), tabId: 1 }, 11000);
+  assert.equal((await store.getActiveTheme(ns)).category, 'celebration');
+});
+
+test('browsing without typing is still damped — no strobing on incidental pages', async () => {
+  const ns = createChromeMock();
+  await engine.handleSignal(ns, { ...search('hawaii vacation maui'), tabId: 1 }, 5000);
+  assert.equal((await store.getActiveTheme(ns)).category, 'tropical');
+
+  // A page merely visited, not searched for, must not seize the screen at once.
+  const result = await engine.handleSignal(ns,
+    { url: 'https://github.com/acme/api/pull/1', title: 'Fix merge conflict · PR #1', tabId: 1 }, 11000);
+  assert.equal(result.outcome, engine.OUTCOME.NO_CHANGE);
+  assert.equal((await store.getActiveTheme(ns)).category, 'tropical');
 });

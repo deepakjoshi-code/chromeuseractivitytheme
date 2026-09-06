@@ -12,6 +12,10 @@ import { NEUTRAL } from '../../src/core/taxonomy.js';
 
 const C = DEFAULT_CONFIG;
 const hit = (category, confidence = 0.8) => ({ category, confidence });
+/** A classification whose strongest evidence was something the user typed. */
+const queryHit = (category, confidence = 0.8) => ({
+  category, confidence, reasons: [{ term: 'x', weight: 1, source: 'query' }]
+});
 
 /** Drive a sequence of [category, confidence, dtMs] and return the trace. */
 function run(steps, config = C) {
@@ -46,21 +50,52 @@ test('confidence is bounded, monotonic and zero for no evidence', () => {
 
 /* ---------------------------------------------------------------- dwell */
 
-test('a single signal does not change the theme (dwell, mechanism 5)', () => {
+test('the first context out of neutral appears immediately', () => {
+  // Dwell exists to stop flicker BETWEEN contexts. With neutral showing there is
+  // nothing to flicker between, so making the user wait only looks broken.
   const { trace } = run([['celebration', 0.8, 100]]);
-  assert.equal(trace[0].decision.changed, false);
-  assert.equal(trace[0].decision.reason, 'dwell-not-met');
+  assert.equal(trace[0].decision.changed, true);
+  assert.equal(trace[0].decision.category, 'celebration');
 });
 
-test('a second corroborating signal satisfies dwell and the theme changes', () => {
-  const { trace } = run([['celebration', 0.8, 100], ['celebration', 0.8, 200]]);
-  assert.equal(trace[1].decision.changed, true);
-  assert.equal(trace[1].decision.category, 'celebration');
+test('switching between two contexts still requires dwell', () => {
+  let state = createState(0);
+  state = ingest(state, hit('celebration', 0.9), 100, C);
+  state = commit(state, decide(state, 100, C), 100);
+  assert.equal(state.active, 'celebration');
+
+  // A single non-query signal for a rival context must not take the screen.
+  state = ingest(state, hit('coding', 0.95), 20000, C);
+  const decision = decide(state, 20100, C);
+  assert.equal(decision.changed, false);
+  assert.equal(decision.reason, 'dwell-not-met');
+});
+
+test('a typed search switches immediately, even against a live context', () => {
+  let state = createState(0);
+  state = ingest(state, hit('celebration', 0.9), 100, C);
+  state = commit(state, decide(state, 100, C), 100);
+
+  // Stated intent: the user typed this. One signal is enough.
+  state = ingest(state, queryHit('coding', 0.95), 20000, C);
+  state = ingest(state, queryHit('coding', 0.95), 20100, C);
+  const decision = decide(state, 20200, C);
+  assert.equal(decision.changed, true);
+  assert.equal(decision.category, 'coding');
+});
+
+test('a typed search uses the shorter rate limit', () => {
+  assert.ok(C.queryRateLimitMs < C.rateLimitMs,
+    'someone typing a new subject should not wait the full window');
 });
 
 test('dwell can also be satisfied by elapsed time alone', () => {
-  const { trace } = run([['celebration', 0.9, 100], ['celebration', 0.05, C.dwellMs + 100]]);
-  assert.equal(trace[1].decision.changed, true);
+  let state = createState(0);
+  state = ingest(state, hit('celebration', 0.9), 100, C);
+  state = commit(state, decide(state, 100, C), 100);
+  state = ingest(state, hit('coding', 0.95), 30000, C);
+  const decision = decide(state, 30000 + C.dwellMs + 100, C);
+  assert.equal(decision.changed, true, 'holding the lead long enough is still enough');
 });
 
 /* ---------------------------------------------------------------- floor */
@@ -194,8 +229,8 @@ test('two accepted changes cannot happen inside the rate-limit window', () => {
 });
 
 test('the very first change is not rate-limited', () => {
-  const { trace } = run([['coding', 0.9, 10], ['coding', 0.9, 10]]);
-  assert.equal(trace[1].decision.changed, true);
+  const { trace } = run([['coding', 0.9, 10]]);
+  assert.equal(trace[0].decision.changed, true);
 });
 
 /* ----------------------------------------------------------------- decay */

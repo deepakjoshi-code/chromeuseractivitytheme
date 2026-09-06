@@ -18,6 +18,17 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const SRC = join(ROOT, 'src');
 const manifest = JSON.parse(readFileSync(join(SRC, 'manifest.json'), 'utf8'));
 
+/**
+ * Strip comments so a source scan tests code rather than prose. Without this,
+ * a comment *explaining* why we never call an API matches the check forbidding
+ * that call — which is how the first version of the permissions test failed.
+ */
+function stripComments(source) {
+  return source
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/(^|[^:])\/\/[^\n]*/g, '$1 ');
+}
+
 function walk(dir, extensions) {
   const out = [];
   for (const entry of readdirSync(dir)) {
@@ -121,7 +132,9 @@ test('the only external URL in the source is the search-box navigation', () => {
     for (const match of source.matchAll(/https?:\/\/[^\s'"`)]+/g)) {
       const url = match[0];
       if (allowed.has(url)) continue;
-      if (url.startsWith('http://*/') || url.startsWith('https://*/')) continue;  // permission patterns
+      // Chrome match patterns (permission scopes and content-script matches) are
+      // not network destinations. Any wildcard in the host position marks one.
+      if (/^https?:\/\/\*/.test(url)) continue;
       if (url.startsWith('http://www.w3.org/')) continue;                          // SVG namespace
       found.push(`${file.replace(ROOT, '.')}: ${url}`);
     }
@@ -192,4 +205,68 @@ test('every category carries the data the classifier needs', () => {
 test('the manifest version matches package.json', () => {
   const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
   assert.equal(manifest.version, pkg.version);
+});
+
+/* ------------------------------- permission request context (0.9.1 fix) --- */
+
+/**
+ * REGRESSION: chrome.permissions.request() requires a user gesture and a
+ * foreground extension page. Calling it from the service worker throws, and
+ * because the throw was caught and ignored, enabling ambient glow silently
+ * granted nothing — the content script never registered and no glow appeared,
+ * with no error shown to the user. Found by hand, not by any suite.
+ */
+test('the service worker never requests permissions (it has no user gesture)', () => {
+  const code = stripComments(readFileSync(join(SRC, 'background/service-worker.js'), 'utf8'));
+  assert.ok(!/chrome\.permissions\.request\s*\(/.test(code),
+    'permissions.request() from a worker always fails — it belongs in a page');
+});
+
+test('the options page requests host access from the checkbox handler', () => {
+  const code = stripComments(readFileSync(join(SRC, 'options/options.js'), 'utf8'));
+  assert.match(code, /chrome\.permissions\.request\s*\(/,
+    'the options page must own the permission request');
+});
+
+test('ambient is only stored as enabled when access was actually granted', () => {
+  // The handler must back out: reset the checkbox and return without persisting,
+  // rather than storing a setting it cannot honour.
+  const code = stripComments(readFileSync(join(SRC, 'options/options.js'), 'utf8'));
+  assert.match(code, /els\.ambient\.checked = false/,
+    'a declined permission must un-tick the box instead of lying about it');
+});
+
+test('enabling ambient reaches tabs that are already open', () => {
+  const code = stripComments(readFileSync(join(SRC, 'background/service-worker.js'), 'utf8'));
+  assert.match(code, /injectIntoOpenTabs/,
+    'registration only affects future page loads; open tabs need injecting');
+  assert.match(code, /chrome\.scripting\.executeScript/);
+});
+
+/* --------------------------------- ambient activation (0.9.1 fixes) ------ */
+
+/**
+ * REGRESSION: the worker listened for permissions.onRemoved but not onAdded.
+ * The options page saves settings before requesting access, so the worker synced
+ * while the permission was still missing, declined to register, and never heard
+ * about the grant that followed. The user clicked Allow and got nothing.
+ */
+test('the worker re-syncs when host access is GRANTED, not only revoked', () => {
+  const code = stripComments(readFileSync(join(SRC, 'background/service-worker.js'), 'utf8'));
+  assert.match(code, /permissions\.onAdded/,
+    'a grant that nothing listens for cannot start the feature');
+  assert.match(code, /permissions\.onRemoved/);
+});
+
+/**
+ * REGRESSION: the overlay was built from the palette's gradient stops, which are
+ * designed to sit close to a theme's own background and are therefore near-white
+ * in every light palette. Composited over a white page they rendered as #fafafb
+ * — a plain white page, which is exactly what beta testing reported.
+ */
+test('the ambient overlay is built from the accent, not the pale gradient stops', () => {
+  const code = stripComments(readFileSync(join(SRC, 'content/ambient.js'), 'utf8'));
+  assert.match(code, /--aura-accent/, 'the accent is the only saturated colour in a palette');
+  assert.ok(!/--aura-grad-1/.test(code),
+    'grad-1 sits closest to the background and is invisible over a light page');
 });

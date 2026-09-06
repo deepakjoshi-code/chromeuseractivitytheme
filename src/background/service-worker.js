@@ -14,7 +14,7 @@ import { MSG } from '../core/messages.js';
 import * as engine from '../core/engine.js';
 import * as store from '../core/storage.js';
 import { getTheme, resolveTheme } from '../core/themes.js';
-import { sanitizeUrl } from '../core/privacy.js';
+import { sanitizeUrl, originsForHosts } from '../core/privacy.js';
 import { NEUTRAL } from '../core/taxonomy.js';
 
 /*
@@ -79,11 +79,16 @@ const AMBIENT_SCRIPT_ID = 'aura-ambient';
  * grants the optional permission.
  */
 async function syncAmbientRegistration(settings) {
-  const shouldRegister = Boolean(settings.enabled && settings.ambient);
+  const sites = settings.ambientSites || [];
+  const origins = originsForHosts(sites);
+  const shouldRegister = Boolean(settings.enabled && settings.ambient && origins.length > 0);
 
+  // Only the listed sites are ever requested or registered, so the access we
+  // hold matches the access the options page promises.
   let granted = false;
   try {
-    granted = await chrome.permissions.contains({ origins: ['http://*/*', 'https://*/*'] });
+    granted = origins.length > 0 &&
+      await chrome.permissions.contains({ origins });
   } catch {
     granted = false;
   }
@@ -100,18 +105,58 @@ async function syncAmbientRegistration(settings) {
     if (shouldRegister && granted && !isRegistered) {
       await chrome.scripting.registerContentScripts([{
         id: AMBIENT_SCRIPT_ID,
-        matches: ['http://*/*', 'https://*/*'],
+        matches: origins,
         js: ['content/ambient.js'],
         css: ['content/ambient.css'],
         runAt: 'document_idle',
         allFrames: false
       }]);
-    } else if ((!shouldRegister || !granted) && isRegistered) {
+    } else if (isRegistered && (!shouldRegister || !granted)) {
       await chrome.scripting.unregisterContentScripts({ ids: [AMBIENT_SCRIPT_ID] });
+    } else if (isRegistered && shouldRegister && granted) {
+      // The allow-list may have changed since registration; re-point it.
+      await chrome.scripting.updateContentScripts([{ id: AMBIENT_SCRIPT_ID, matches: origins }]);
     }
   } catch {
     // Registration races (two events at once) are safe to ignore; the next
     // settings change re-syncs.
+  }
+
+  // Registering only affects pages loaded from now on. Without this, enabling
+  // ambient appears to do nothing until every open tab is manually reloaded.
+  if (shouldRegister && granted) await injectIntoOpenTabs(settings);
+}
+
+/**
+ * Inject the overlay into tabs that are already open and eligible.
+ *
+ * Failures here are expected and ignored: restricted pages (chrome://, the Web
+ * Store), tabs that navigated away mid-call, and tabs where the script is
+ * already present all reject, and none of them are problems.
+ */
+async function injectIntoOpenTabs(settings) {
+  const origins = originsForHosts(settings.ambientSites || []);
+  if (origins.length === 0) return;
+
+  let tabs = [];
+  try {
+    tabs = await chrome.tabs.query({ url: origins });
+  } catch {
+    return;
+  }
+
+  for (const tab of tabs) {
+    if (typeof tab.id !== 'number' || tab.incognito) continue;
+    const sanitized = sanitizeUrl(tab.url);
+    if (!sanitized || !engine.shouldRunAmbient(settings, sanitized.host)) continue;
+
+    try {
+      await chrome.scripting.insertCSS({ target: { tabId: tab.id }, files: ['content/ambient.css'] });
+      await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['content/ambient.js'] });
+      await updateAmbientForTab(tab.id, tab.url);
+    } catch {
+      // Not injectable; the next navigation in that tab will pick it up.
+    }
   }
 }
 
@@ -120,9 +165,14 @@ async function ambientPayload(host) {
   const settings = await store.getSettings(chrome);
   const active = await store.getActiveTheme(chrome);
   const enabled = engine.shouldRunAmbient(settings, host);
+  const theme = getTheme(active.category);
   return {
     enabled,
     intensity: settings.intensity,
+    // Both palettes: only the content script can tell whether the site is
+    // currently rendering light or dark.
+    light: enabled ? { accent: theme.light.accent, gradient: theme.light.gradient } : null,
+    dark: enabled ? { accent: theme.dark.accent, gradient: theme.dark.gradient } : null,
     vars: enabled ? resolveTheme(active.category, 'light', settings.intensity) : {}
   };
 }
@@ -233,12 +283,12 @@ async function handleMessage(message, sender) {
 
     case MSG.UPDATE_SETTINGS: {
       const settings = await store.updateSettings(chrome, message.patch);
-      if (message.patch && message.patch.ambient === true) {
-        // Host permission is requested only at the moment ambient is enabled
-        // (gap G-07) — never at install time.
-        try { await chrome.permissions.request({ origins: ['http://*/*', 'https://*/*'] }); }
-        catch { /* user declined; ambient simply stays inert */ }
-      }
+      /*
+       * The host permission is NOT requested here. chrome.permissions.request()
+       * needs a user gesture in a foreground page; from a worker it throws. The
+       * options page owns that call and only stores `ambient: true` once access
+       * has actually been granted (see options.js).
+       */
       await syncAmbientRegistration(settings);
       const state = await engine.getFullState(chrome, t);
       broadcast(state);
@@ -247,6 +297,7 @@ async function handleMessage(message, sender) {
 
     case 'aura/get-ambient':
       return { payload: await ambientPayload(senderHost) };
+
 
     case MSG.GET_LOG:
       return { log: await store.getLog(chrome) };
@@ -293,6 +344,21 @@ chrome.runtime.onInstalled.addListener(async () => {
  */
 if (chrome.permissions && chrome.permissions.onRemoved) {
   chrome.permissions.onRemoved.addListener(async () => {
+    await syncAmbientRegistration(await store.getSettings(chrome));
+  });
+}
+
+/*
+ * Re-sync when access is GRANTED, not just when it is revoked.
+ *
+ * Without this the feature could never start: the options page saves the
+ * settings first, so the worker syncs while the permission is still missing and
+ * declines to register — and the grant that arrives a moment later told nobody.
+ * The user saw the prompt, clicked Allow, and got nothing. This also covers a
+ * grant made directly from chrome://extensions.
+ */
+if (chrome.permissions && chrome.permissions.onAdded) {
+  chrome.permissions.onAdded.addListener(async () => {
     await syncAmbientRegistration(await store.getSettings(chrome));
   });
 }

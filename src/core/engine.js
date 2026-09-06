@@ -245,3 +245,4 @@ export function shouldRunAmbient(settings, host) {
   if (sites.length === 0) return false;   // explicit opt-in per site, never blanket
   return hostInList(host, sites);
 }
+

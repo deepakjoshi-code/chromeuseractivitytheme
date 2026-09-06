@@ -297,8 +297,8 @@ export const THEME_KEYS = Object.keys(THEMES);
 /** Intensity levels (PRD §7.4). Governs how much of the theme is expressed. */
 export const INTENSITY = {
   off:        { gradientOpacity: 0,    motifOpacity: 0,    motion: false, ambient: false },
-  subtle:     { gradientOpacity: 0.35, motifOpacity: 0,    motion: false, ambient: false },
-  balanced:   { gradientOpacity: 0.75, motifOpacity: 0.12, motion: true,  ambient: false },
+  subtle:     { gradientOpacity: 0.35, motifOpacity: 0,    motion: false, ambient: true  },
+  balanced:   { gradientOpacity: 0.75, motifOpacity: 0.12, motion: true,  ambient: true  },
   expressive: { gradientOpacity: 1,    motifOpacity: 0.20, motion: true,  ambient: true }
 };
 
