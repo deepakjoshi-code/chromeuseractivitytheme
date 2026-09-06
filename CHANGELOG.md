@@ -2,6 +2,35 @@
 
 All notable changes to Aura. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.9.5] — 2026-09-06
+
+### Changed
+- **A typed search now re-themes the browser immediately.** One search per
+  subject, no waiting. Beta testing surfaced the obvious complaint: search for a
+  kids party, nothing happens, the product looks broken.
+
+  Two rules were in the way, and both were aimed at something else:
+
+  - **Dwell** required a second corroborating signal before any change. It exists
+    to stop incidental browsing from repainting the browser — it was never meant
+    to make someone type the same subject twice. It is now waived for a typed
+    query, and waived when the current theme is neutral (there is nothing to
+    flicker between when nothing is showing).
+  - **Banked evidence** meant a single new query could not outweigh the context
+    already accumulated, so after a Hawaii search a "kids party" search still
+    showed tropical. Typing a new search is a declaration that the subject has
+    changed, so every other context's evidence is now cut to 40% at that moment.
+    Anything the user is still genuinely doing re-earns its place on the next
+    signal.
+
+  A query-driven change also uses a 3s rate limit instead of 10s.
+
+- **Ordinary browsing is unchanged and still damped.** A page merely visited, not
+  searched for, still needs dwell, still needs the evidence margin, and still
+  cannot strobe. Tests pin both halves: four consecutive searches each re-theme
+  on their own, and an interleaved browsing session over sixty signals produces
+  at most one change.
+
 ## [0.9.4] — 2026-09-06
 
 ### Changed

@@ -100,13 +100,15 @@ test('the same page in the same tab is not scored twice (tab switching)', async 
   const ns = createChromeMock();
   const page = { url: 'https://github.com/acme/api/pull/1', title: 'Fix merge conflict · PR #1', tabId: 7 };
 
-  const first = await engine.handleSignal(ns, page, 1000);
+  await engine.handleSignal(ns, page, 1000);
+  const evidenceAfterFirst = (await store.getContextState(ns)).scores.coding.value;
   const second = await engine.handleSignal(ns, page, 4000);
   assert.equal(second.outcome, engine.OUTCOME.DUPLICATE,
     'switching back to an open tab is not new activity');
 
+  // Assert the real thing: the second delivery added no evidence at all.
   const scores = (await store.getContextState(ns)).scores;
-  assert.equal(scores.coding.value, first.confidence || scores.coding.value,
+  assert.equal(scores.coding.value, evidenceAfterFirst,
     'evidence must not accumulate from a re-activation');
   assert.equal((await store.getLog(ns)).length, 1, 'and it must not be logged twice');
 });

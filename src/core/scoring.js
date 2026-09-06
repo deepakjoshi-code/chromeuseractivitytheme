@@ -44,6 +44,23 @@ export const DEFAULT_CONFIG = {
   stalenessMs: 15 * 1000,
   dwellMs: 1500,
   dwellSignals: 2,
+  /**
+   * A change driven by a typed search may repaint sooner than the normal rate
+   * limit allows. Someone typing two different queries is deliberately changing
+   * subject; making them wait reads as broken, not as stable.
+   */
+  queryRateLimitMs: 3 * 1000,
+  /**
+   * What a typed search does to every OTHER context's evidence.
+   *
+   * Waiving dwell was not enough on its own: after a Hawaii search, a single
+   * "kids party" query could not outweigh the evidence Hawaii had already
+   * banked, so the browser stayed tropical and looked unresponsive. Typing a new
+   * search is a declaration that the subject has changed, so the previous
+   * subject's evidence is cut hard at that moment. Anything the user is still
+   * genuinely doing re-earns its place on the next signal.
+   */
+  queryDisplacement: 0.4,
   /*
    * Half-life. Tuned down from the PRD's original 5 minutes: this product
    * answers "what are you doing NOW", and at a 5-minute half-life a morning's
@@ -71,8 +88,22 @@ export function createState(now = 0) {
     lastChangeAt: 0,   // 0 = never changed, so the first change is not rate-limited
     leader: null,
     leaderSince: 0,
-    leaderSignals: 0
+    leaderSignals: 0,
+    /** Whether the front-runner was put there by a typed search query. */
+    leaderFromQuery: false
   };
+}
+
+/**
+ * Did this classification come from something the user typed?
+ *
+ * A search query is stated intent — the strongest signal the product has. The
+ * dwell requirement exists to stop incidental browsing from repainting the
+ * browser; it was never meant to make someone type the same subject twice.
+ */
+export function isQueryDriven(classification) {
+  const reasons = (classification && classification.reasons) || [];
+  return reasons.length > 0 && reasons[0].source === 'query';
 }
 
 /** Accumulated evidence -> bounded confidence. Monotonic. */
@@ -127,6 +158,16 @@ export function ingest(state, classification, now, config = DEFAULT_CONFIG) {
   const confidence = (classification && classification.confidence) || 0;
   if (!category || category === NEUTRAL || confidence <= 0) return next;
 
+  // A typed search declares a new subject; everything else steps back.
+  if (isQueryDriven(classification)) {
+    for (const [key, entry] of Object.entries(scores)) {
+      if (key === category) continue;
+      const value = entry.value * config.queryDisplacement;
+      if (value >= config.pruneBelow) scores[key] = { value, lastSeen: entry.lastSeen };
+      else delete scores[key];
+    }
+  }
+
   const previous = scores[category] ? scores[category].value : 0;
   scores[category] = {
     value: Math.min(previous + confidence, config.maxEvidence),
@@ -135,12 +176,15 @@ export function ingest(state, classification, now, config = DEFAULT_CONFIG) {
 
   // Track how long the front-runner has been in front (dwell).
   const leader = topCategory(scores);
+  const fromQuery = isQueryDriven(classification);
   if (leader && leader === state.leader) {
     next.leaderSignals = (state.leaderSignals || 0) + 1;
+    next.leaderFromQuery = Boolean(state.leaderFromQuery) || (fromQuery && leader === category);
   } else {
     next.leader = leader;
     next.leaderSince = now;
     next.leaderSignals = 1;
+    next.leaderFromQuery = fromQuery && leader === category;
   }
   return next;
 }
@@ -164,8 +208,8 @@ export function decide(state, now, config = DEFAULT_CONFIG) {
     reason
   });
 
-  const rateLimited = state.lastChangeAt && now - state.lastChangeAt < config.rateLimitMs;
   const challenger = topCategory(scores);
+  const rateLimited = state.lastChangeAt && now - state.lastChangeAt < config.rateLimitMs;
 
   // Nothing left with any evidence: drift home to neutral.
   if (!challenger) {
@@ -189,11 +233,26 @@ export function decide(state, now, config = DEFAULT_CONFIG) {
     return hold('below-margin');
   }
 
+  /*
+   * Dwell is waived in two cases, both of which the rule was never aimed at.
+   *
+   * A typed search is stated intent, not incidental browsing — asking someone to
+   * search the same subject twice before the browser reacts reads as broken. And
+   * when the incumbent is neutral there is nothing to flicker between, so the
+   * first commitment out of a blank state costs nothing to make immediate.
+   */
+  const fromQuery = Boolean(state.leaderFromQuery) && state.leader === challenger;
+  const fromNeutral = incumbent === NEUTRAL;
+
   const heldMs = now - (state.leaderSince || now);
   const dwellOk = heldMs >= config.dwellMs || (state.leaderSignals || 0) >= config.dwellSignals;
-  if (state.leader === challenger && !dwellOk) return hold('dwell-not-met');
+  if (state.leader === challenger && !dwellOk && !fromQuery && !fromNeutral) {
+    return hold('dwell-not-met');
+  }
 
-  if (rateLimited) return hold('rate-limited');
+  // A query-driven change gets the shorter rate limit for the same reason.
+  const limit = fromQuery ? config.queryRateLimitMs : config.rateLimitMs;
+  if (state.lastChangeAt && now - state.lastChangeAt < limit) return hold('rate-limited');
 
   return {
     changed: true,
@@ -213,6 +272,7 @@ export function commit(state, decision, now) {
     lastChangeAt: now,
     leader: decision.category,
     leaderSince: now,
-    leaderSignals: 0
+    leaderSignals: 0,
+    leaderFromQuery: false
   };
 }
