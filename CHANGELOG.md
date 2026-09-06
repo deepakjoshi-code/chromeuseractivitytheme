@@ -12,15 +12,16 @@ All notable changes to Aura. Format follows [Keep a Changelog](https://keepachan
   does the mirror on dark pages. That is what allows colour through the middle,
   where the reading happens, at no cost to legibility.
 
-  Measured on a white page with the Tropical tint at 0.62: background `#ffffff`
-  becomes `#cbf6f0`, while body-text contrast moves only from 16.1 to 14.1 —
-  still more than double the WCAG AAA threshold of 7. On a dark page, 13.4 to 9.5.
+  Measured on a white page with the Tropical tint at 0.56: background `#ffffff`
+  becomes `#cff7f1`, while body-text contrast moves only from 16.1 to 14.3 and
+  links from 12.4 to 11.3 — both more than double the WCAG AAA threshold of 7.
+  On a dark page, 13.4 to 9.5.
 
   The previous version had to keep the middle transparent because a plain
   translucent layer dims everything under it equally, which left the only safe
   place for colour in the margins.
 
-- Strength raised to 0.25 / 0.45 / 0.62 across Subtle, Balanced and Expressive.
+- Strength raised to 0.25 / 0.45 / 0.56 across Subtle, Balanced and Expressive.
 - The content script now picks light or dark itself, by reading one computed
   background **colour**. No text, markup or content is read — as before.
 

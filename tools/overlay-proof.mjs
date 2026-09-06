@@ -24,7 +24,7 @@ import { resolve, basename } from 'node:path';
 import { existsSync } from 'node:fs';
 import { THEMES } from '../src/core/themes.js';
 
-const STRENGTH = { subtle: 0.25, balanced: 0.45, expressive: 0.62 };
+const STRENGTH = { subtle: 0.25, balanced: 0.45, expressive: 0.56 };
 
 const [, , fileArg, themeArg = 'tropical', levelArg = 'expressive'] = process.argv;
 if (!fileArg || !existsSync(resolve(fileArg))) {

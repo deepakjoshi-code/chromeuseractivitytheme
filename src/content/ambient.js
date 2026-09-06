@@ -19,10 +19,11 @@
    *
    * These are higher than a plain alpha wash could safely go because the layer
    * blends rather than covers. Measured on a white page with a tropical tint at
-   * 0.60: background #ffffff becomes #cbf6f0 while body-text contrast only moves
-   * from 16.1 to 14.1 — still more than double the WCAG AAA threshold of 7.
+   * 0.56: background #ffffff becomes #cff7f1, body-text contrast moves only from
+   * 16.1 to 14.3 and links from 12.4 to 11.3 — both more than double the WCAG
+   * AAA threshold of 7.
    */
-  var STRENGTH = { subtle: 0.25, balanced: 0.45, expressive: 0.62 };
+  var STRENGTH = { subtle: 0.25, balanced: 0.45, expressive: 0.56 };
   var MESSAGE = 'aura/ambient-update';
   var element = null;
 
