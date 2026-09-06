@@ -2,6 +2,29 @@
 
 All notable changes to Aura. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.9.3] — 2026-09-06
+
+### Removed
+- **Page themes, added in 0.9.2, are gone.** That feature injected CSS overriding
+  a site's own background so the tint sat behind the text. It read nothing, and
+  it set background only — never colour, font, size or layout — but it did change
+  how someone else's page rendered, and that is a line this product should not
+  cross. Aura now touches nothing belonging to a site. `core/site-themes.js`,
+  `content/site-theme.js` and their tests are deleted rather than left dormant:
+  code for a rejected idea is worse than no code.
+
+### Changed
+- **Ambient glow is now the whole in-page experience, and much stronger.** It
+  remains a single transparent layer placed *on top* of the page — it adds one
+  element and alters nothing beneath it. Coverage is now a vignette: fully
+  transparent through the middle where the reading happens, strongest at the
+  edges and corners where there is usually only background. That is a deliberate
+  shape, because a layer on top tints whatever is under it, and text must stay
+  exactly as the site rendered it.
+- Strength raised to 0.14 / 0.26 / 0.40 across Subtle, Balanced and Expressive.
+- Ambient is available at Subtle and Balanced, not only Expressive. Gating the
+  entire in-page effect behind the most extreme setting simply hid it.
+
 ## [0.9.2] — 2026-09-05
 
 ### Added

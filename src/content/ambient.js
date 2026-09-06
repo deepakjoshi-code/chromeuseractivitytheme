@@ -14,6 +14,8 @@
   'use strict';
 
   var ROOT_ID = 'aura-ambient-root';
+  /** How strong the tint is. Expressive is the most this should ever be. */
+  var STRENGTH = { subtle: 0.14, balanced: 0.26, expressive: 0.40 };
   var MESSAGE = 'aura/ambient-update';
   var element = null;
 
@@ -60,16 +62,27 @@
     var warm = vars['--aura-grad-2'] || accent;
 
     var node = ensure();
+    /*
+     * Edge-weighted on purpose.
+     *
+     * This layer sits ON TOP of the page and changes nothing beneath it, which
+     * means any colour it carries also tints the text under it. So the coverage
+     * is shaped: a vignette that is fully transparent through the middle, where
+     * the reading happens, and strongest at the edges and corners, where there
+     * is usually nothing but background. The result reads as coloured light
+     * around the page rather than a filter over it.
+     */
     node.style.background = [
-      'radial-gradient(52% 40% at 0% 0%, ' + accent + ' 0%, transparent 68%)',
-      'radial-gradient(48% 38% at 100% 0%, ' + warm + ' 0%, transparent 66%)',
-      'radial-gradient(64% 30% at 50% 100%, ' + accent + ' 0%, transparent 70%)'
+      'radial-gradient(58% 46% at 0% 0%, ' + accent + ' 0%, transparent 70%)',
+      'radial-gradient(54% 44% at 100% 0%, ' + warm + ' 0%, transparent 68%)',
+      'radial-gradient(70% 36% at 50% 100%, ' + accent + ' 0%, transparent 72%)',
+      'radial-gradient(128% 108% at 50% 50%, transparent 34%, ' + accent + ' 100%)'
     ].join(',');
 
     // A frame of layout before opacity, so the first paint animates in.
     requestAnimationFrame(function () {
       if (!element) return;
-      var strength = payload.intensity === 'expressive' ? 0.30 : 0.18;
+      var strength = STRENGTH[payload.intensity] || STRENGTH.balanced;
       element.style.opacity = String(strength);
     });
   }

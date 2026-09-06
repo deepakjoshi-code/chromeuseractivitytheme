@@ -250,8 +250,10 @@ test('ambient stays off unless every gate opens (PRD A7, gap G-07)', async () =>
   assert.equal(engine.shouldRunAmbient(base, 'example.com'), true);
   assert.equal(engine.shouldRunAmbient({ ...base, enabled: false }, 'example.com'), false);
   assert.equal(engine.shouldRunAmbient({ ...base, ambient: false }, 'example.com'), false);
-  assert.equal(engine.shouldRunAmbient({ ...base, intensity: 'balanced' }, 'example.com'), false,
-    'ambient requires the expressive intensity level');
+  assert.equal(engine.shouldRunAmbient({ ...base, intensity: 'balanced' }, 'example.com'), true,
+    'ambient is available below Expressive');
+  assert.equal(engine.shouldRunAmbient({ ...base, intensity: 'off' }, 'example.com'), false,
+    'Off means off');
   assert.equal(engine.shouldRunAmbient({ ...base, ambientSites: [] }, 'example.com'), false,
     'an empty allow-list must never mean "everywhere"');
   assert.equal(engine.shouldRunAmbient(base, 'other.com'), false);

@@ -10,14 +10,12 @@ import { MSG } from '../core/messages.js';
 import { THEMES, THEME_KEYS } from '../core/themes.js';
 import { NEUTRAL } from '../core/taxonomy.js';
 import { originsForHosts } from '../core/privacy.js';
-import { adapterHosts } from '../core/site-themes.js';
 
 const els = {
   intensity: document.getElementById('intensity'),
   scheme: document.getElementById('scheme'),
   showReason: document.getElementById('showReason'),
   ambient: document.getElementById('ambient'),
-  pageThemes: document.getElementById('pageThemes'),
   ambientSites: document.getElementById('ambientSites'),
   muted: document.getElementById('muted'),
   blocklist: document.getElementById('blocklist'),
@@ -109,7 +107,6 @@ function renderSettings() {
   els.scheme.value = settings.scheme;
   els.showReason.checked = settings.showReason;
   els.ambient.checked = settings.ambient;
-  els.pageThemes.checked = settings.pageThemes;
   els.ambientSites.value = (settings.ambientSites || []).join('\n');
   els.blocklist.value = (settings.blocklist || []).join('\n');
   renderMutedGrid();
@@ -205,20 +202,6 @@ els.ambient.addEventListener('change', async () => {
 
   await patch({ ambient: els.ambient.checked },
     els.ambient.checked ? 'Ambient glow on' : 'Ambient glow off');
-});
-
-els.pageThemes.addEventListener('change', async () => {
-  // Same rule as ambient: request from the gesture, and only store the setting
-  // once access actually exists. Scoped to the hosts adapters cover, so the
-  // prompt names Google rather than claiming every website.
-  if (els.pageThemes.checked && !(await requestSites(adapterHosts()))) {
-    els.pageThemes.checked = false;
-    toast('Page themes need access to the supported sites');
-    return;
-  }
-  await patch({ pageThemes: els.pageThemes.checked },
-    els.pageThemes.checked ? 'Page themes on — reload a Google search to see it'
-                           : 'Page themes off');
 });
 
 /** Request host access for exactly these sites. Returns whether it was granted. */

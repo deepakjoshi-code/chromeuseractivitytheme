@@ -17,12 +17,6 @@ export const DEFAULT_SETTINGS = {
   scheme: 'system',
   /** Ambient page overlay, OFF by default (PRD A7 / gap G-07). */
   ambient: false,
-  /**
-   * Per-site page tinting, OFF by default. Unlike the ambient overlay this
-   * restyles the page's own background, so it only runs on sites with an
-   * adapter written for them (see core/site-themes.js).
-   */
-  pageThemes: false,
   /** Hosts where the ambient overlay is permitted. */
   ambientSites: [],
   /** Categories the user never wants to see (PRD B7). */

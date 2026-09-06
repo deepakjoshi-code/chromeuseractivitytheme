@@ -42,10 +42,12 @@
 
   <section class="card">
     <h2>Ambient page glow</h2>
-    <p class="help">A soft edge of colour around pages you visit. Off by default, and only
-      ever on sites you list here — Aura asks Chrome for access to <strong>those sites
-      only</strong>, never to every site. It draws one decorative overlay and never reads
-      page content.</p>
+    <p class="help">A wash of the current theme's colour over pages you visit. Off by default,
+      and only ever on sites you list here — Aura asks Chrome for access to <strong>those sites
+      only</strong>, never to every site.</p>
+    <p class="help">It adds a single transparent layer <strong>on top of</strong> the page and
+      nothing else. The site's own colours, text, layout and styling are never altered, and
+      page content is never read. Switch it off and the layer is gone.</p>
     <div class="row">
       <label for="ambient">Enable ambient glow</label>
       <input type="checkbox" id="ambient">
@@ -53,21 +55,6 @@
     <label class="field-label" for="ambientSites">Allowed sites (one per line)</label>
     <textarea id="ambientSites" rows="3" spellcheck="false"
       placeholder="example.com&#10;news.ycombinator.com"></textarea>
-  </section>
-
-  <section class="card">
-    <h2>Page themes <span class="tag">beta</span></h2>
-    <p class="help">Tints the page itself, behind the text, so a search for a Hawaii trip
-      actually looks tropical. This restyles someone else's markup, so it only runs on sites
-      Aura has been written and checked for — currently <strong>Google Search</strong>. It
-      changes background colour only: never text, fonts, size or layout, and it follows the
-      site's own light or dark mode.</p>
-    <div class="row">
-      <label for="pageThemes">Enable page themes</label>
-      <input type="checkbox" id="pageThemes">
-    </div>
-    <p class="help">More sites will follow. If a page ever looks wrong, switch this off and it
-      returns to normal immediately — nothing is permanently changed.</p>
   </section>
 
   <section class="card">

@@ -12,7 +12,6 @@ import { sanitizeUrl, isBlocklisted, hostInList, redactForLog, isSensitiveSignal
 import { createState, ingest, decide, commit, DEFAULT_CONFIG } from './scoring.js';
 import { NEUTRAL } from './taxonomy.js';
 import { getTheme, THEMES, INTENSITY } from './themes.js';
-import { adapterFor } from './site-themes.js';
 import * as store from './storage.js';
 
 /** Every outcome the pipeline can produce. Tests assert on these. */
@@ -247,14 +246,3 @@ export function shouldRunAmbient(settings, host) {
   return hostInList(host, sites);
 }
 
-/**
- * Whether the per-site page tint should run here.
- *
- * Narrower than ambient by design: it only runs where an adapter exists, so it
- * can never guess at a site it knows nothing about.
- */
-export function shouldThemePage(settings, host, path) {
-  if (!settings.enabled || !settings.pageThemes) return false;
-  if (isBlocklisted(host, settings.blocklist)) return false;
-  return Boolean(adapterFor(host, path));
-}
