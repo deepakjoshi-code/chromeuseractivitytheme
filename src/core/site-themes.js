@@ -12,6 +12,16 @@
  * when a site redesigns. That is the cost of the effect looking real rather than
  * like a colour filter over the screen.
  *
+ * KNOWN LIMIT — how much tint is visible depends entirely on how much of the
+ * page is actually background. A plain results page is mostly background and
+ * themes strongly (screenshots/pagetheme-tropical.png). A module-dense page —
+ * stock quotes, People-also-ask, discussion carousels — is wall-to-wall opaque
+ * cards, so the tint only reaches the margins and gutters
+ * (screenshots/dark-after.png). That is arithmetic, not a bug, and the fix is
+ * not to dissolve the cards: those surfaces are how the site groups content, and
+ * making them translucent would put text contrast at the mercy of whatever tint
+ * sits behind it — the exact failure the background-only rule exists to prevent.
+ *
  * Pure data + pure functions. No chrome.*, no DOM.
  */
 
