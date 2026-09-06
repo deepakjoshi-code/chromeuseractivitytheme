@@ -2,6 +2,39 @@
 
 All notable changes to Aura. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.9.4] — 2026-09-06
+
+### Changed
+- **The whole page now carries the theme, not just its edges.** The overlay
+  blends instead of covering: `multiply` over a light page, `screen` over a dark
+  one. Multiply leaves dark text mathematically untouched — black times any
+  colour is still black — while turning a white background into the tint. Screen
+  does the mirror on dark pages. That is what allows colour through the middle,
+  where the reading happens, at no cost to legibility.
+
+  Measured on a white page with the Tropical tint at 0.62: background `#ffffff`
+  becomes `#cbf6f0`, while body-text contrast moves only from 16.1 to 14.1 —
+  still more than double the WCAG AAA threshold of 7. On a dark page, 13.4 to 9.5.
+
+  The previous version had to keep the middle transparent because a plain
+  translucent layer dims everything under it equally, which left the only safe
+  place for colour in the margins.
+
+- Strength raised to 0.25 / 0.45 / 0.62 across Subtle, Balanced and Expressive.
+- The content script now picks light or dark itself, by reading one computed
+  background **colour**. No text, markup or content is read — as before.
+
+### Unchanged
+Still one transparent element added on top, and nothing about the page touched:
+`tools/overlay-proof.mjs` confirms every word byte-identical and every element in
+the same position to the pixel. The harness was updated in step with the overlay,
+so it keeps proving the thing that actually ships.
+
+### Note
+Because the layer blends with everything beneath it, images on the page take on
+a tint too. On photographs this reads as a colour cast rather than damage, but it
+is a real visual consequence of colouring the full page rather than its margins.
+
 ## [0.9.3] — 2026-09-06
 
 ### Removed

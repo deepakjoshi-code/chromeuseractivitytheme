@@ -24,7 +24,7 @@ import { resolve, basename } from 'node:path';
 import { existsSync } from 'node:fs';
 import { THEMES } from '../src/core/themes.js';
 
-const STRENGTH = { subtle: 0.14, balanced: 0.26, expressive: 0.40 };
+const STRENGTH = { subtle: 0.25, balanced: 0.45, expressive: 0.62 };
 
 const [, , fileArg, themeArg = 'tropical', levelArg = 'expressive'] = process.argv;
 if (!fileArg || !existsSync(resolve(fileArg))) {
@@ -36,16 +36,17 @@ const theme = THEMES[themeArg] || THEMES.tropical;
 const name = basename(fileArg).replace(/\.[^.]+$/, '');
 
 /** Exactly what content/ambient.js does — one element, nothing else touched. */
-function addOverlay({ accent, warm, opacity }) {
+function addOverlay({ stops, mode, opacity }) {
   const el = document.createElement('div');
   el.id = 'aura-ambient-root';
   el.setAttribute('aria-hidden', 'true');
   el.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:2147483646';
+  el.style.mixBlendMode = mode;
   el.style.background = [
-    `radial-gradient(58% 46% at 0% 0%, ${accent} 0%, transparent 70%)`,
-    `radial-gradient(54% 44% at 100% 0%, ${warm} 0%, transparent 68%)`,
-    `radial-gradient(70% 36% at 50% 100%, ${accent} 0%, transparent 72%)`,
-    `radial-gradient(128% 108% at 50% 50%, transparent 34%, ${accent} 100%)`
+    `radial-gradient(62% 52% at 0% 0%, ${stops[0]} 0%, transparent 72%)`,
+    `radial-gradient(58% 50% at 100% 0%, ${stops[1]} 0%, transparent 70%)`,
+    `radial-gradient(74% 42% at 50% 100%, ${stops[2]} 0%, transparent 74%)`,
+    `linear-gradient(160deg, ${stops[0]} 0%, ${stops[1]} 50%, ${stops[2]} 100%)`
   ].join(',');
   el.style.opacity = String(opacity);
   (document.body || document.documentElement).appendChild(el);
@@ -83,8 +84,8 @@ async function render(withOverlay) {
   await page.waitForTimeout(600);
   if (withOverlay) {
     await page.evaluate(addOverlay, {
-      accent: theme.light.accent,
-      warm: theme.light.gradient[1],
+      stops: theme.light.gradient,
+      mode: 'multiply',
       opacity: STRENGTH[levelArg] || STRENGTH.expressive
     });
     await page.waitForTimeout(250);

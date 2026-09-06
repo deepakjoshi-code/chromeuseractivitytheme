@@ -165,9 +165,14 @@ async function ambientPayload(host) {
   const settings = await store.getSettings(chrome);
   const active = await store.getActiveTheme(chrome);
   const enabled = engine.shouldRunAmbient(settings, host);
+  const theme = getTheme(active.category);
   return {
     enabled,
     intensity: settings.intensity,
+    // Both palettes: only the content script can tell whether the site is
+    // currently rendering light or dark.
+    light: enabled ? { accent: theme.light.accent, gradient: theme.light.gradient } : null,
+    dark: enabled ? { accent: theme.dark.accent, gradient: theme.dark.gradient } : null,
     vars: enabled ? resolveTheme(active.category, 'light', settings.intensity) : {}
   };
 }
